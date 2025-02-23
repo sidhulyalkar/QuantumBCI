@@ -4,12 +4,12 @@ This project demonstrates the integration of quantum and classical signal proces
 
 ## File Structure
 
-project/
-├── qfft_module.py
-├── qkalman_module.py
-├── QFT_Notebook.ipynb
-├── KalmanFilter_Notebook.ipynb
-└── README.md
+  project/
+  ├── qfft_module.py
+  ├── qkalman_module.py
+  ├── QFT_Notebook.ipynb
+  ├── KalmanFilter_Notebook.ipynb
+  └── README.md
 
 ## Module Descriptions
 
