@@ -3,13 +3,12 @@
 This project demonstrates the integration of quantum and classical signal processing techniques for brain-computer interface (BCI) applications. It includes modules for generating and simulating quantum Fourier transforms (QFT) and for implementing both classical and quantum-enhanced Kalman filters. These tools explore how quantum algorithms could eventually enhance the processing and tracking of neural signals.
 
 ## File Structure
-
-  project/
-  ├── qfft_module.py
-  ├── qkalman_module.py
-  ├── QFT_Notebook.ipynb
-  ├── KalmanFilter_Notebook.ipynb
-  └── README.md
+- project/
+  - qfft_module.py
+  - qkalman_module.py
+  - QFT_Notebook.ipynb
+  - qKalmanFilter_Notebook.ipynb
+  - README.md
 
 ## Module Descriptions
 
