@@ -1,5 +1,11 @@
 """QuantumBCI: falsifiable quantum and quantum-inspired neural modelling."""
 
+from .benchmarking import (
+    BenchmarkMetrics,
+    DensityBenchmarkResult,
+    IndexSplit,
+    benchmark_density_embeddings,
+)
 from .claims import ClaimClass, MechanismCard, mechanism_card
 from .contextuality import commutator_norm, order_effect, projector
 from .kalman import QLSADiagnostics, kalman_filter, qlsa_diagnostics
@@ -8,10 +14,14 @@ from .spectral import amplitude_encode, classical_fft, qft_probabilities, qft_st
 from .states import density_from_samples, l1_coherence, purity, von_neumann_entropy
 
 __all__ = [
+    "BenchmarkMetrics",
     "ClaimClass",
+    "DensityBenchmarkResult",
+    "IndexSplit",
     "MechanismCard",
     "QLSADiagnostics",
     "amplitude_encode",
+    "benchmark_density_embeddings",
     "classical_fft",
     "commutator_norm",
     "dephasing_collapse",

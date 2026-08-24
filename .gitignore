@@ -14,3 +14,7 @@ dist/
 .ipynb_checkpoints/
 .DS_Store
 .env
+
+# Local QuantumBCI workbench state. Promote intentional study configs under configs/.
+.quantumbci/
+quantumbci.json

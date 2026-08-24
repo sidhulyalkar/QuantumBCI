@@ -108,6 +108,17 @@ def test_loader_and_renderer(tmp_path: Path) -> None:
     assert "quantum_inspired" in rendered
 
 
+def test_bundled_manifest_can_be_loaded_by_stable_id() -> None:
+    manifest = load_manifest("E001_density_geometry")
+    assert manifest.id == "E001_density_geometry"
+    assert manifest.claim_class.value == "quantum_inspired"
+
+
+def test_unknown_bundled_manifest_gives_discovery_hint() -> None:
+    with pytest.raises(FileNotFoundError, match="experiments list"):
+        load_manifest("E999_does_not_exist")
+
+
 def test_repository_manifests_validate() -> None:
     root = Path(__file__).resolve().parents[1]
     manifests = sorted((root / "experiments" / "manifests").glob("*.json"))

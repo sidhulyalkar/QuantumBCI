@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "artifact_root": "../.quantumbci/runs",
+  "default_seed": 0,
+  "source_sha": "working-tree"
+}
