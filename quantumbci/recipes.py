@@ -200,12 +200,20 @@ class FrozenEmbeddingRecipe:
         }
 
 
-def load_recipe(path: str | Path) -> FrozenEmbeddingRecipe:
+def _parse_recipe(path: str | Path) -> FrozenEmbeddingRecipe:
     recipe_path = Path(path)
     payload = json.loads(recipe_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("recipe root must be a JSON object")
     return FrozenEmbeddingRecipe.from_mapping(payload, base_dir=recipe_path.parent)
+
+
+def load_recipe(path: str | Path) -> FrozenEmbeddingRecipe:
+    """Load and fully preflight a recipe for interactive validation/handoff."""
+
+    recipe = _parse_recipe(path)
+    preflight_recipe(recipe)
+    return recipe
 
 
 def write_recipe_template(path: str | Path, *, force: bool = False) -> Path:
@@ -286,9 +294,21 @@ class RecipeRunResult:
 def run_recipe(path: str | Path, config: WorkbenchConfig) -> RecipeRunResult:
     """Execute one frozen-embedding recipe into the normal QuantumBCI RunStore."""
 
-    recipe = load_recipe(path)
+    recipe = _parse_recipe(path)
     embeddings, labels, train_indices, test_indices, split = _load_arrays(recipe)
-    array_contract = preflight_recipe(recipe)
+    target = np.asarray(labels).reshape(-1)
+    array_contract = {
+        "embeddings": {"shape": list(np.asarray(embeddings).shape), "dtype": str(np.asarray(embeddings).dtype)},
+        "labels": {"shape": list(np.asarray(labels).shape), "dtype": str(np.asarray(labels).dtype)},
+        "train_indices": {"shape": list(np.asarray(train_indices).shape), "dtype": str(np.asarray(train_indices).dtype)},
+        "test_indices": {"shape": list(np.asarray(test_indices).shape), "dtype": str(np.asarray(test_indices).dtype)},
+        "n_examples": int(len(np.asarray(embeddings))),
+        "n_train": int(len(split.train_indices)),
+        "n_test": int(len(split.test_indices)),
+        "train_classes": [str(value) for value in np.unique(target[split.train_indices]).tolist()],
+        "test_classes": [str(value) for value in np.unique(target[split.test_indices]).tolist()],
+        "split_name": split.name,
+    }
     identity = recipe.identity_mapping(source_sha=config.source_sha, array_contract=array_contract)
     scientific_fingerprint = sha256(_canonical_json(identity).encode("utf-8")).hexdigest()
     run_id, run_dir = RunStore(config.artifact_root).create(recipe.id, scientific_fingerprint)
