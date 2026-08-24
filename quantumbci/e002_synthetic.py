@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -12,14 +12,20 @@ from .dynamics_equivalence import (
     SIGMA_Z,
     audit_lindblad_gauge_nonidentifiability,
     audit_qubit_lindblad_affine_equivalence,
+    bloch_to_density,
     compile_qubit_lindblad_to_affine,
     density_to_bloch,
 )
 from .open_system import evolve_lindblad
-from .dynamics_equivalence import bloch_to_density
 
 Array = np.ndarray
 SIGMA_MINUS = np.asarray([[0.0, 1.0], [0.0, 0.0]], dtype=complex)
+
+# Preregistered synthetic specificity thresholds. The canonical cases must project
+# tightly back into the declared family, while an explicit stable-but-noncanonical
+# affine adversary must remain clearly outside that family.
+CANONICAL_STRUCTURE_RESIDUAL_MAX = 0.05
+CLASSICAL_ADVERSARY_RESIDUAL_MIN = 0.10
 
 
 @dataclass(frozen=True)
@@ -87,6 +93,10 @@ def recover_canonical_parameters(
 
     Hamiltonian frequencies occupy the antisymmetric portion of ``A``. We average
     redundant entries to reduce numerical finite-difference noise.
+
+    This projection alone does **not** establish family membership. Call
+    :func:`canonical_structure_residual` after recovery to measure how much of the
+    fitted affine generator is left unexplained by the declared canonical family.
     """
 
     a = np.asarray(matrix, dtype=float)
@@ -102,9 +112,6 @@ def recover_canonical_parameters(
     transverse_decay = -0.5 * (a[0, 0] + a[1, 1])
     gamma_dephasing = transverse_decay - gamma_relaxation / 2.0
 
-    # Small negative values can arise from trajectory finite differences. The
-    # recovered object remains a physical canonical parameterization only when the
-    # estimates are non-negative beyond numerical tolerance.
     tolerance = 1e-8
     if gamma_relaxation < -tolerance or gamma_dephasing < -tolerance:
         raise ValueError(
@@ -115,6 +122,36 @@ def recover_canonical_parameters(
         omega_z=float(omega_z),
         gamma_dephasing=float(max(0.0, gamma_dephasing)),
         gamma_relaxation=float(max(0.0, gamma_relaxation)),
+    )
+
+
+def canonical_structure_residual(
+    matrix: Array,
+    offset: Array,
+    parameters: CanonicalQubitParameters,
+) -> float:
+    """Return max-absolute generator residual after canonical-family projection.
+
+    Parameter extraction uses only the entries that identify the declared canonical
+    coordinates. This residual then checks *all* entries of ``A,b``. A generic affine
+    system can therefore yield plausible-looking ``omega``/``gamma`` values yet still
+    be rejected because couplings, anisotropic decay, or affine offsets remain outside
+    the canonical model family.
+    """
+
+    a = np.asarray(matrix, dtype=float)
+    b = np.asarray(offset, dtype=float).reshape(-1)
+    if a.shape != (3, 3) or b.shape != (3,):
+        raise ValueError("canonical structure residual requires A=(3,3) and b=(3,)")
+    if not np.all(np.isfinite(a)) or not np.all(np.isfinite(b)):
+        raise ValueError("affine generator contains non-finite values")
+    hamiltonian, collapses = canonical_qubit_model(parameters)
+    canonical = compile_qubit_lindblad_to_affine(hamiltonian, collapses)
+    return float(
+        max(
+            np.max(np.abs(a - canonical.matrix)),
+            np.max(np.abs(b - canonical.offset)),
+        )
     )
 
 
@@ -207,6 +244,7 @@ class SyntheticRecoveryCase:
     normalized_parameter_errors: dict[str, float]
     mean_normalized_error: float
     affine_fit_residual: float
+    canonical_structure_residual: float
     equivalence_audit: dict[str, Any]
     gauge_audit: dict[str, Any]
 
@@ -218,6 +256,7 @@ class SyntheticRecoveryCase:
             "normalized_parameter_errors": dict(self.normalized_parameter_errors),
             "mean_normalized_error": float(self.mean_normalized_error),
             "affine_fit_residual": float(self.affine_fit_residual),
+            "canonical_structure_residual": float(self.canonical_structure_residual),
             "equivalence_audit": dict(self.equivalence_audit),
             "gauge_audit": dict(self.gauge_audit),
         }
@@ -234,6 +273,27 @@ def _canonical_cases() -> tuple[CanonicalQubitParameters, ...]:
     )
 
 
+def _noncanonical_classical_adversary() -> tuple[Array, Array]:
+    """Stable affine look-alike with plausible canonical coordinates but extra structure.
+
+    It preserves the same visible omega/gamma-like entries as a canonical case while
+    adding anisotropic transverse decay, x<-z coupling, z<-x coupling, and an x offset.
+    Merely extracting four parameters must therefore *not* classify it as belonging to
+    the declared Lindblad family.
+    """
+
+    matrix = np.asarray(
+        [
+            [-0.20, -0.80, 0.30],
+            [0.80, -0.60, -1.20],
+            [0.10, 1.20, -0.35],
+        ],
+        dtype=float,
+    )
+    offset = np.asarray([0.10, 0.00, 0.35], dtype=float)
+    return matrix, offset
+
+
 def run_e002_synthetic_recovery_grid(
     *,
     seed: int = 2027,
@@ -243,7 +303,10 @@ def run_e002_synthetic_recovery_grid(
 
     The benchmark first fits an unconstrained classical affine generator to noisy
     trajectories, then maps that generator into the declared gauge-fixed canonical
-    family. This keeps parameter recovery separate from the exact Lindblad notation.
+    family. It separately checks whole-generator family residuals and rejects an
+    explicit noncanonical classical affine adversary. This prevents plausible-looking
+    parameter projections from being mistaken for evidence that the canonical family
+    actually generated a trajectory.
     """
 
     if not np.isfinite(noise_std) or noise_std < 0:
@@ -276,11 +339,16 @@ def run_e002_synthetic_recovery_grid(
         fitted_matrix, fitted_offset = fit_affine_generator_from_trajectories(observed, times)
         recovered = recover_canonical_parameters(fitted_matrix, fitted_offset)
         errors = _parameter_errors(truth, recovered)
-        residual = float(
+        affine_residual = float(
             max(
                 np.max(np.abs(fitted_matrix - exact.matrix)),
                 np.max(np.abs(fitted_offset - exact.offset)),
             )
+        )
+        structure_residual = canonical_structure_residual(
+            fitted_matrix,
+            fitted_offset,
+            recovered,
         )
         for name in ("omega_x", "omega_z"):
             true_value = getattr(truth, name)
@@ -294,7 +362,8 @@ def run_e002_synthetic_recovery_grid(
                 recovered=recovered,
                 normalized_parameter_errors=errors,
                 mean_normalized_error=float(np.mean(list(errors.values()))),
-                affine_fit_residual=residual,
+                affine_fit_residual=affine_residual,
+                canonical_structure_residual=structure_residual,
                 equivalence_audit=audit_qubit_lindblad_affine_equivalence(
                     hamiltonian,
                     collapses,
@@ -307,21 +376,41 @@ def run_e002_synthetic_recovery_grid(
         )
 
     mean_errors = np.asarray([case.mean_normalized_error for case in cases], dtype=float)
+    structure_residuals = np.asarray(
+        [case.canonical_structure_residual for case in cases],
+        dtype=float,
+    )
     median_error = float(np.median(mean_errors))
+    max_structure_residual = float(np.max(structure_residuals))
+
+    adversary_matrix, adversary_offset = _noncanonical_classical_adversary()
+    adversary_projection = recover_canonical_parameters(adversary_matrix, adversary_offset)
+    adversary_residual = canonical_structure_residual(
+        adversary_matrix,
+        adversary_offset,
+        adversary_projection,
+    )
+    adversary_rejected = bool(adversary_residual >= CLASSICAL_ADVERSARY_RESIDUAL_MIN)
+
     affine_equivalence_pass = all(
         bool(case.equivalence_audit["equivalent_within_tolerance"]) for case in cases
     )
     gauge_audit_pass = all(
         bool(case.gauge_audit["equivalent_within_tolerance"]) for case in cases
     )
+    canonical_structure_pass = bool(
+        max_structure_residual <= CANONICAL_STRUCTURE_RESIDUAL_MAX
+    )
     promotion_pass = bool(
         median_error <= 0.20
         and sign_inversions == 0
         and affine_equivalence_pass
         and gauge_audit_pass
+        and canonical_structure_pass
+        and adversary_rejected
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment": "E002",
         "evidence_tier": "synthetic_parameter_recovery",
         "claim_class": "quantum_inspired",
@@ -331,17 +420,28 @@ def run_e002_synthetic_recovery_grid(
         "n_cases": len(cases),
         "median_normalized_recovery_error": median_error,
         "max_case_mean_normalized_recovery_error": float(np.max(mean_errors)),
+        "max_canonical_structure_residual": max_structure_residual,
+        "canonical_structure_residual_max_allowed": CANONICAL_STRUCTURE_RESIDUAL_MAX,
         "systematic_sign_inversions": int(sign_inversions),
         "affine_equivalence_pass": affine_equivalence_pass,
         "gauge_nonidentifiability_witness_pass": gauge_audit_pass,
+        "canonical_structure_pass": canonical_structure_pass,
+        "classical_adversary": {
+            "kind": "noncanonical_stable_affine_lookalike",
+            "projected_parameters": adversary_projection.to_mapping(),
+            "canonical_structure_residual": float(adversary_residual),
+            "minimum_rejection_residual": CLASSICAL_ADVERSARY_RESIDUAL_MIN,
+            "rejected_as_canonical_family": adversary_rejected,
+        },
         "synthetic_identifiability_gate_pass": promotion_pass,
         "dynamical_information_novel": False,
         "physical_quantum_promotion_eligible": False,
         "cases": [case.to_mapping() for case in cases],
         "interpretation": (
             "The declared gauge-fixed canonical parameters can be tested for recovery, "
-            "but the fully observed qubit trajectory remains exactly equivalent to a "
-            "classical affine Bloch ODE. Recovery therefore validates parameterization and "
-            "identifiability inside this family, not uniquely quantum neural dynamics."
+            "and whole-generator residuals test whether a fitted affine system actually "
+            "belongs near that family. A noncanonical classical look-alike is required to "
+            "remain outside the family. Even when these gates pass, the fully observed "
+            "qubit trajectory is exactly equivalent to a classical affine Bloch ODE."
         ),
     }
