@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from importlib.metadata import entry_points
 from types import SimpleNamespace
 from typing import Any, Mapping
 
@@ -105,3 +106,39 @@ def test_neuros_evidence_binding_rejects_cross_partition_split() -> None:
             calibration_split=split,
             neuros_source_sha="neuros-git-sha",
         )
+
+
+def test_real_neuros_signal_frame_round_trip_when_installed() -> None:
+    contracts = pytest.importorskip("neuros.contracts")
+    SignalFrame = contracts.SignalFrame
+    ClockDomain = contracts.ClockDomain
+    frame = SignalFrame(
+        stream_id="eeg",
+        sequence_id=7,
+        data=np.random.default_rng(8).normal(size=(4, 64)),
+        sample_rate_hz=250.0,
+        host_receive_time_ns=123,
+        device_time_ns=100,
+        clock_domain=ClockDomain.DEVICE,
+        metadata={"session": "smoke"},
+    )
+    transformed = DensityGeometryTransform(output="observables").transform(frame)
+    assert isinstance(transformed, SignalFrame)
+    assert transformed.stream_id == frame.stream_id
+    assert transformed.sequence_id == frame.sequence_id
+    assert transformed.sample_rate_hz == frame.sample_rate_hz
+    assert transformed.data.shape == (3,)
+    assert transformed.metadata["session"] == "smoke"
+    assert transformed.metadata["representation"] == "quantumbci_density_observables"
+
+
+def test_neuros_plugin_entry_point_is_discoverable_when_neuros_installed() -> None:
+    pytest.importorskip("neuros.contracts")
+    discovered = entry_points()
+    if hasattr(discovered, "select"):
+        transforms = tuple(discovered.select(group="neuros.transforms"))
+    else:  # pragma: no cover - compatibility with older importlib.metadata
+        transforms = tuple(entry_points(group="neuros.transforms"))
+    matching = [item for item in transforms if item.name == "quantumbci-density"]
+    assert len(matching) == 1
+    assert matching[0].load() is DensityGeometryTransform
