@@ -2,28 +2,93 @@
 
 **A falsifiable workbench for quantum, quantum-inspired, and classical models of neural signals.**
 
-QuantumBCI began as a small QFT/Kalman demonstration. The modern project is a research workbench for a
-harder question: **does a specific quantum-structured mechanism add identifiable, reproducible value
-to neural modelling after strong classical alternatives are tested?**
+QuantumBCI asks a deliberately harder question than “can quantum mathematics be applied to EEG?”:
+**does a specific quantum-structured mechanism add identifiable, reproducible value after strong
+classical alternatives are given their best chance?**
 
-The project deliberately separates four ideas that are often blurred together:
+The project separates four claim classes that are often blurred together:
 
-1. **Classical controls** such as FFT and Kalman/state-space models.
-2. **Quantum-inspired models** that use density operators, non-commuting observables, or open-system
+1. **Classical controls** such as FFT, covariance geometry and Kalman/state-space models.
+2. **Quantum-inspired models** using density operators, non-commuting observables or open-system
    dynamics as mathematical inductive biases without claiming the brain is physically quantum.
-3. **Quantum algorithms** such as QFT/QLSA, whose value must include state preparation, circuit,
-   sampling, noise, and readout costs.
-4. **Physical quantum neural hypotheses**, which require independent operational evidence about the
-   biological substrate. Model fit is not that evidence.
+3. **Quantum algorithms** whose value must include state preparation, circuit, sampling, noise and
+   readout costs.
+4. **Physical quantum neural hypotheses**, which require independent operational evidence about a
+   biological substrate. Better model fit is not that evidence.
 
-> **Current scientific stance:** this repository implements useful quantum mathematics and quantum
-> algorithm reference paths, but it does **not** claim that neural tissue exhibits biologically
-> functional entanglement, long-lived coherence, or a demonstrated quantum computational advantage.
+> **Scientific stance:** QuantumBCI does not claim biologically functional entanglement, long-lived
+> neural coherence, or demonstrated quantum computational advantage in brain tissue.
+
+## Five-minute quickstart
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+
+quantumbci init
+quantumbci doctor
+quantumbci smoke
+quantumbci runs list
+```
+
+`quantumbci smoke` runs a deterministic end-to-end density-mechanism recovery study and writes a
+self-describing artifact bundle under `.quantumbci/runs/`, including `run.json`, metrics,
+predictions, artifact hashes, Markdown and a standalone **HTML report**.
+
+The smoke study is synthetic by design. Its signal lives in cross-feature correlation so density
+geometry should recover it and an off-diagonal ablation should damage it. That qualifies plumbing
+and mechanism recovery. It is not empirical neuroscience evidence.
+
+See the [Research Workbench guide](docs/WORKBENCH.md) for the full CLI and artifact model.
+
+## Bring your own embeddings
+
+Already have frozen representations from LaBraM, EEGPT, neurOS, ORION or another encoder? You can
+run the matched density/control/ablation benchmark without writing Python:
+
+```bash
+quantumbci benchmark embeddings.npy labels.npy \
+  --train-indices train_indices.npy \
+  --test-indices test_indices.npy \
+  --split-name subject-exclusive-v1 \
+  --output density_result.json
+```
+
+`embeddings.npy` must have shape `examples × tokens × features`. QuantumBCI **requires explicit split
+indices** and never invents a random split on the caller’s behalf.
+
+The same workflow is available as a NumPy-only API:
+
+```python
+import numpy as np
+from quantumbci import IndexSplit, benchmark_density_embeddings
+
+embeddings = np.load("embeddings.npy")
+labels = np.load("labels.npy")
+
+split = IndexSplit(
+    train_indices=np.load("train_indices.npy"),
+    test_indices=np.load("test_indices.npy"),
+    name="subject-exclusive-v1",
+)
+
+result = benchmark_density_embeddings(embeddings, labels, split)
+print(result.to_mapping())
+```
+
+The benchmark compares the same low-capacity readout family on:
+
+- full density geometry;
+- a diagonal-only density control;
+- pooled mean/std classical features;
+- the **fitted density readout after off-diagonal deletion**, which is an intervention rather than a
+  separately refit model.
 
 ## QuantumBCI × neurOS
 
-QuantumBCI is designed to compose with [neurOS](https://github.com/sidhulyalkar/neurOS-v1) rather than
-rebuild a second neural runtime stack.
+QuantumBCI composes with [neurOS](https://github.com/sidhulyalkar/neurOS-v1) rather than rebuilding a
+second neural runtime stack.
 
 ```text
 neurOS
@@ -41,180 +106,129 @@ neuros-mechint
   interventions / held-out evidence / replication / evidence packs
 ```
 
-The dependency direction is deliberate: **neurOS remains independent of QuantumBCI**. QuantumBCI can
-optionally consume stable neurOS packages and registers the external `quantumbci-density` transform
-through neurOS's normal `neuros.transforms` plugin group.
+The dependency direction is intentional: **neurOS remains independent of QuantumBCI**. QuantumBCI
+optionally consumes stable neurOS packages and registers `quantumbci-density` through neurOS’s normal
+`neuros.transforms` plugin group.
 
-This lets a neurOS `SignalFrame` move through a QuantumBCI density representation while retaining its
-stream/timing/provenance identity. E001 also reuses neurOS's leakage-resistant grouped and longitudinal
-split contracts, so QuantumBCI mechanisms can be compared against neurOS EEGNet/EEG-Conformer and
-future SourceWeigher lanes on the exact same sample authority rather than on look-alike splits.
+This lets a neurOS `SignalFrame` pass through a QuantumBCI representation while preserving
+stream/timing/provenance identity. QuantumBCI can also reuse neurOS grouped and longitudinal split
+contracts so quantum-inspired mechanisms, EEGNet/EEG-Conformer, foundation-model representations and
+SourceWeigher controls can be compared on the **same evidence authority**.
 
-See [the full neurOS integration guide](docs/NEUROS_INTEGRATION.md).
+See the [neurOS integration guide](docs/NEUROS_INTEGRATION.md).
 
-## Why this direction
+## Install profiles
 
-Modern BCI modelling now includes pretrained EEG representations such as LaBraM, EEGPT, BrainWave,
-and NeuroLM. A useful QuantumBCI experiment should therefore ask whether a quantum-structured layer
-adds **incremental representation or mechanism value** on identical raw data or frozen embeddings,
-not whether it can outperform a toy sine-wave baseline.
+Base package and local workbench:
 
-The most interesting near-term hypotheses are:
+```bash
+pip install -e '.[dev]'
+```
 
-- **Density geometry:** are trace-one PSD latent states and their observables useful across subjects?
-- **Open-system dynamics:** do interpretable Hamiltonian/collapse parameters capture latent neural
-  transitions better than LDS/Kalman/neural-ODE controls?
-- **Contextuality:** do non-commuting measurement models predict preregistered cue/order effects more
-  compactly than history-aware classical models?
-- **Quantum algorithms:** can a *specific observable-level* neural computation justify end-to-end
-  QFT/QLSA/variational-circuit resources?
-- **Physical mechanisms:** can an experiment operationally distinguish a proposed non-classical
-  biological mechanism from classical nonlinear/stochastic dynamics?
+Optional Qiskit/Aer:
 
-See [the research agenda](docs/RESEARCH_AGENDA.md), [mechanism cards](docs/MECHANISM_CARDS.md),
-[interpretability protocol](docs/INTERPRETABILITY_PROTOCOL.md), and
-[experiment registry](experiments/README.md).
+```bash
+pip install -e '.[quantum]'
+```
+
+Released neurOS-compatible packages:
+
+```bash
+pip install -e '.[neuros]'
+```
+
+Shared causal-evidence layer:
+
+```bash
+pip install -e '.[neuros-mechint]'
+```
+
+During active co-development, pin the exact sibling neurOS workspace packages described in
+[`docs/NEUROS_INTEGRATION.md`](docs/NEUROS_INTEGRATION.md). The base QuantumBCI package intentionally
+depends only on NumPy.
+
+## Workbench commands
+
+```text
+quantumbci init                 create quantumbci.json
+quantumbci doctor               show environment + optional integration readiness
+quantumbci smoke                run a complete synthetic mechanism sanity study
+quantumbci benchmark ...        evaluate user-supplied frozen .npy embeddings
+quantumbci experiments list     discover research manifests
+quantumbci experiments validate validate a scientific DAG contract
+quantumbci experiments plan     bind a manifest to a source revision
+quantumbci runs list            inspect local run history
+quantumbci runs show <RUN_ID>   inspect one run ledger
+quantumbci demo                 original compact mechanism demonstration
+```
+
+All important commands support machine-readable JSON output.
 
 ## Research kernel
 
 ```text
 quantumbci/
+├── benchmarking.py       # explicit-split density/control benchmark API
+├── workbench.py          # config, run registry, smoke study, HTML report
+├── cli.py                # installed `quantumbci` command
 ├── claims.py             # claim classes + falsification contracts
 ├── spectral.py           # complex FFT + correct ideal-QFT measurement semantics
 ├── states.py             # density operators, purity, entropy, coherence
 ├── open_system.py        # transparent Lindblad dynamics
 ├── contextuality.py      # non-commuting operators and order effects
 ├── kalman.py             # stable classical Kalman + QLSA suitability diagnostics
-├── foundation.py         # frozen foundation-token -> density-state bridge
+├── foundation.py         # frozen foundation-token → density-state bridge
 ├── interpretability.py   # mechanism signatures, ablations, stability
-├── signals.py            # deterministic synthetic test signals
-├── experiments/          # manifests + deterministic orchestration contracts
+├── experiments/          # manifest + deterministic orchestration contracts
 └── integrations/
     ├── neuros.py         # neurOS runtime/foundation/evidence bridge
     └── neuros_mechint.py # density interventions for shared causal evidence
 ```
 
-The original `qfft_module.py` and `qkalman_module.py` remain as compatibility surfaces, but their
-scientific semantics are corrected. In particular:
+The original `qfft_module.py` and `qkalman_module.py` remain compatibility surfaces, but their
+scientific semantics are corrected: QFT measurement probabilities are not presented as a complex
+FFT, a NumPy inverse is never labelled quantum-enhanced, retired Qiskit Aqua HHL code is not an
+active backend, and experimental linear-system solvers must be explicit and resource-accounted.
 
-- QFT computational-basis probabilities are no longer presented as equivalent to a complex FFT;
-  phase is lost unless a richer measurement protocol is used.
-- a classical `np.linalg.inv` is never called “quantum-enhanced”;
-- the retired Qiskit Aqua HHL implementation is not used as an active backend;
-- experimental linear-system solvers must be explicitly injected and resource-accounted.
+## Main experiment program
 
-## Install
+The near-term research ladder is intentionally adversarial:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-pytest -q
-python -m quantumbci
-```
+- **E001 density geometry:** identical frozen embeddings, explicit subject/session authority,
+  covariance/Riemannian/bilinear/PCA/random-PSD controls, SourceWeigher adaptation controls,
+  off-diagonal and basis interventions.
+- **E002 open-system dynamics:** synthetic parameter recovery first, then Lindblad-style latent
+  dynamics against LDS/Kalman, VAR, damped oscillator, switching-state and nonlinear controls.
+- **E003 contextual/order effects:** retrospective discovery is non-confirmatory; prospective AB/BA
+  work requires preregistration and applicable ethics approval.
+- **E004 quantum resource sandbox:** QPU work begins only from an observable that survives prior
+  classical/quantum-inspired gates.
+- **E005 physical quantum mechanism screen:** requires an identified substrate, operational witness,
+  discriminating perturbation, detection floor, strongest classical mimic and replication design.
 
-Optional Qiskit/Aer support:
-
-```bash
-pip install -e '.[quantum]'
-```
-
-For a released neurOS-compatible installation:
+Machine-readable contracts live in `experiments/manifests/`. Planning freezes the scientific DAG
+before results are inspected:
 
 ```bash
-pip install -e '.[neuros]'
+quantumbci experiments validate experiments/manifests/E001_density_geometry.json
+quantumbci experiments plan experiments/manifests/E001_density_geometry.json \
+  --source-sha "$(git rev-parse HEAD)" \
+  --output .quantumbci/plans/E001
 ```
 
-During active co-development, install the exact sibling neurOS workspace packages instead; see
-[`docs/NEUROS_INTEGRATION.md`](docs/NEUROS_INTEGRATION.md). The base QuantumBCI package intentionally
-depends only on NumPy.
-
-## Example: use QuantumBCI inside neurOS
-
-Once QuantumBCI is installed, neurOS can discover the density transform through its existing plugin
-registry:
-
-```yaml
-streams:
-  - id: eeg
-    source:
-      plugin: mock
-      options:
-        sampling_rate: 250.0
-        channels: 8
-    transforms:
-      - plugin: quantumbci-density
-        options:
-          sample_axis: -1
-          output: observables
-```
-
-The transform annotates the resulting frame with `quantumbci_claim_class=quantum_inspired`. Runtime
-success is therefore never silently promoted into a physical-quantum biological claim.
-
-A lightweight executable demonstration lives at `examples/neuros_density_bridge.py`.
-
-## Example: an interpretable open-system probe
-
-```python
-import numpy as np
-from quantumbci.open_system import dephasing_collapse, evolve_lindblad
-from quantumbci.states import density_from_samples, l1_coherence
-
-latents = np.random.default_rng(0).normal(size=(128, 2))
-rho0 = density_from_samples(latents)
-H = np.array([[0.0, 0.8], [0.8, 0.2]], dtype=complex)
-collapse = [dephasing_collapse(2, 0, 0.5), dephasing_collapse(2, 1, 0.5)]
-trajectory = evolve_lindblad(rho0, H, np.linspace(0, 1, 101), collapse_operators=collapse)
-print(l1_coherence(trajectory[0]), l1_coherence(trajectory[-1]))
-```
-
-This demonstrates the *model mechanism*. It does not assert that the latent state is a microscopic
-quantum state.
-
-## Foundation-model integration
-
-`quantumbci.foundation.density_states_from_embeddings` accepts `(batch, tokens, features)` arrays,
-so the same quantum-inspired probe can sit on frozen LaBraM, EEGPT, BrainWave, NeuroLM, specialist,
-or random-control embeddings without coupling the core library to a particular deep-learning stack.
-
-When `neuros-foundation` is installed, `NeurOSFoundationEncoder` can consume a runnable neurOS registry
-adapter while preserving neurOS's fail-closed availability semantics. A catalog entry without a real
-execution adapter raises rather than generating placeholder benchmark embeddings.
-
-The recommended experiment is paired: **same subjects, same evidence authority, same frozen embeddings,
-same readout, different representation layer.** Then run off-diagonal/basis interventions and bootstrap
-the mechanism observables.
+A plan ID is deliberately weaker than a scientific run ID. Real studies additionally bind raw data
+fingerprints and immutable split/calibration authority.
 
 ## Shared mechanistic evidence
 
-QuantumBCI provides mechanism-specific interventions without cloning `neuros-mechint`:
+QuantumBCI provides density-specific interventions without cloning `neuros-mechint`:
 
 - remove density off-diagonals;
 - permute the density basis while preserving its spectrum;
 - mix continuously toward the maximally mixed state.
 
-When `neuros-mechint` is installed, these interventions can run through its native input-causal audit,
-evidence tier, manifest, control, and result contracts. QuantumBCI does not relabel that evidence.
-
-## Reproducible experiment orchestration
-
-The `experiments/manifests/` registry freezes hypotheses, datasets, encoders, stage dependencies,
-primary metrics, artifacts, and promotion gates before results are inspected. `quantumbci.experiments`
-validates those DAGs and produces deterministic plan identities.
-
-A plan identity is intentionally weaker than a scientific run identity. For neurOS-backed experiments,
-the latter additionally binds:
-
-- upstream/raw dataset fingerprint;
-- neurOS partition fingerprint;
-- neurOS calibration/final-evaluation fingerprint when applicable;
-- QuantumBCI source revision;
-- neurOS source revision and installed package versions.
-
-CI separately tests QuantumBCI across Python 3.10–3.12 and qualifies the neurOS bridge against an exact
-pinned neurOS source revision, including a real `SignalFrame`, plugin discovery, and a synthetic real
-neurOS longitudinal evidence contract.
+When `neuros-mechint` is installed, those interventions run through its native input-causal audit,
+evidence-tier, manifest, control and result contracts. QuantumBCI does not relabel that evidence.
 
 ## Validation philosophy
 
@@ -223,37 +237,35 @@ A result is interesting only if it survives three ledgers:
 - **Mathematical:** Hermiticity/PSD/trace, normalization, numerical stability, circuit semantics.
 - **Predictive:** held-out subjects/sessions, calibration, transfer, data efficiency, compute.
 - **Mechanistic:** parameter recovery, intervention prediction, identifiability, stability, matched
-  classical alternatives, explicit falsifiers.
+  classical alternatives and explicit falsifiers.
 
 A negative scientific finding is allowed to be a successful software run. Failing a promotion gate
-should make downstream claims ineligible, not turn falsification into an infrastructure error.
+should make a downstream claim ineligible, not turn falsification into an infrastructure error.
+
+CI separately qualifies Python 3.10–3.12, the installed workbench console/smoke path, and the neurOS
+bridge against an exact pinned neurOS source revision.
 
 ## Reading context
 
-- Quantum cognition is a well-developed use of quantum probability **without requiring quantum
-  brain physics**: Pothos & Busemeyer (2022), https://pubmed.ncbi.nlm.nih.gov/34546804/
-- A 2025 overview makes the same quantum-probability-versus-physics distinction:
-  https://pubmed.ncbi.nlm.nih.gov/40608277/
-- Recent work explicitly explores bridges from oscillatory neural networks to quantum-like states:
-  https://pubmed.ncbi.nlm.nih.gov/40889614/ and https://pubmed.ncbi.nlm.nih.gov/41446506/
+- Quantum cognition can use quantum probability **without requiring quantum brain physics**:
+  Pothos & Busemeyer (2022), https://pubmed.ncbi.nlm.nih.gov/34546804/
 - LaBraM (ICLR 2024): https://openreview.net/forum?id=QzTpTRVtrP
 - EEGPT (NeurIPS 2024): https://github.com/BINE022/EEGPT
 - 2026 EEG foundation-model benchmark: https://arxiv.org/abs/2601.17883
-- Qiskit removed its old linear-solver/HHL module; historical documentation also emphasizes that
-  full solution readout and oracle assumptions matter to the speedup claim:
-  https://quantum.cloud.ibm.com/docs/en/api/qiskit/release-notes/0.43
+- Qiskit removed its old linear-solver/HHL module; historical docs also emphasize readout/oracle
+  assumptions: https://quantum.cloud.ibm.com/docs/en/api/qiskit/release-notes/0.43
 
 ## Roadmap
 
-- **v0.2:** scientific claim ledger + mechanism kernel + CI/tests
+- **v0.2:** claim ledger + mechanism kernel + scientific semantics
 - **v0.3:** experiment manifests/orchestration + neurOS runtime/evidence integration
-- **v0.4:** executable E001 density benchmark on frozen neurOS/foundation representations
-- **v0.5:** identifiable Lindblad-vs-LDS latent dynamics benchmark
+- **v0.4:** usable local workbench + frozen-embedding benchmark + executable E001 foundation
+- **v0.5:** authoritative real E001 longitudinal benchmark + Lindblad-vs-LDS implementation
 - **v0.6:** preregistered contextual/order-effect experiment with classical adversaries
-- **v0.7:** quantum-hardware/resource sandbox only for hypotheses that survive the prior ladder
+- **v0.7:** quantum-hardware/resource sandbox only for hypotheses surviving the prior ladder
 
 ## Legacy notebooks
 
-`test_qffy.ipynb` and the empty `test_qkalman.ipynb` are retained for provenance. They should be
-replaced by reproducible example notebooks only after the benchmark harness exists, so notebooks never
-become the sole source of research logic again.
+`test_qffy.ipynb` and the empty `test_qkalman.ipynb` are retained for provenance. Reproducible CLI,
+Python APIs and artifact ledgers are now the supported path; notebooks should remain teaching or
+exploration surfaces rather than the sole source of research logic.

@@ -194,10 +194,58 @@ class ExperimentManifest:
         return sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
 
-def load_manifest(path: str | Path) -> ExperimentManifest:
-    """Load and validate one JSON experiment manifest."""
+def _resolve_manifest_path(reference: str | Path) -> Path:
+    """Resolve an explicit path or a bundled experiment ID/filename.
 
-    manifest_path = Path(path)
+    This lets an installed wheel use ``E001_density_geometry`` directly instead
+    of requiring knowledge of internal package paths. Explicit existing paths
+    always win.
+    """
+
+    direct = Path(reference)
+    if direct.exists():
+        return direct
+
+    text = str(reference).strip()
+    if not text:
+        raise FileNotFoundError("manifest reference must not be empty")
+    names = [text]
+    if not text.endswith(".json"):
+        names.append(f"{text}.json")
+
+    registries = (
+        Path(__file__).resolve().parent / "manifests",
+        Path("experiments/manifests"),
+    )
+    for registry in registries:
+        for name in names:
+            candidate = registry / name
+            if candidate.exists():
+                return candidate
+
+    # Final lookup by the declared experiment id, useful if a future filename
+    # differs from its manifest id.
+    for registry in registries:
+        if not registry.exists():
+            continue
+        for candidate in sorted(registry.glob("*.json")):
+            try:
+                payload = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict) and str(payload.get("id", "")) == text:
+                return candidate
+
+    raise FileNotFoundError(
+        f"Unknown experiment manifest {text!r}. Use 'quantumbci experiments list' "
+        "to inspect bundled experiment IDs."
+    )
+
+
+def load_manifest(path: str | Path) -> ExperimentManifest:
+    """Load and validate one JSON experiment manifest or bundled experiment ID."""
+
+    manifest_path = _resolve_manifest_path(path)
     try:
         value = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:

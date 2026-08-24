@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "E001_density_geometry",
+  "title": "Density geometry on neurOS and EEG foundation-model representations",
+  "claim_class": "quantum_inspired",
+  "objective": "Test whether trace-one PSD latent geometry adds reproducible longitudinal, cross-subject, or calibration value beyond complexity-matched classical geometry on identical neurOS/foundation representations and frozen evidence authority.",
+  "datasets": ["neuros:moabb-kumar2024", "neuros:moabb-ma2020", "neuros:moabb-wang2026", "external:TUEV_or_TUAB_replication"],
+  "encoders": ["neuros-models:eegnet", "neuros-models:eeg-conformer", "neuros-foundation:runnable_registry_adapter", "external:LaBraM", "external:EEGPT"],
+  "primary_metrics": ["macro_f1", "balanced_accuracy", "subject_level_bootstrap_delta", "ece", "brier_score"],
+  "stages": [
+    {"id":"data_contract","kind":"data","depends_on":[],"command":["python","-m","quantumbci.experiments.tasks","data-contract","E001","neuros"],"resources":{"cpu":1},"produces":["dataset_fingerprint.json","data_contract.json"]},
+    {"id":"split_registry","kind":"data","depends_on":["data_contract"],"command":["python","-m","quantumbci.experiments.tasks","split-registry","E001","neuros"],"resources":{"cpu":1},"produces":["split_registry.json"]},
+    {"id":"extract_embeddings","kind":"model","depends_on":["split_registry"],"command":["python","-m","quantumbci.experiments.tasks","extract-embeddings","E001"],"resources":{"gpu":1,"gpu_memory_gb":16},"produces":["embedding_index.json"]},
+    {"id":"build_representations","kind":"mechanism","depends_on":["extract_embeddings"],"command":["python","-m","quantumbci.experiments.tasks","build-representations","E001"],"resources":{"cpu":4},"produces":["representation_index.json","mechanism_observables.json"]},
+    {"id":"fit_matched_readouts","kind":"model","depends_on":["build_representations"],"command":["python","-m","quantumbci.experiments.tasks","fit-readouts","E001"],"resources":{"cpu":8},"produces":["predictions.parquet","fit_summary.json"]},
+    {"id":"mechanism_ablations","kind":"interpretability","depends_on":["fit_matched_readouts"],"command":["python","-m","quantumbci.experiments.tasks","ablations","E001"],"resources":{"cpu":8},"produces":["ablation_metrics.json"]},
+    {"id":"bootstrap","kind":"statistics","depends_on":["fit_matched_readouts","mechanism_ablations"],"command":["python","-m","quantumbci.experiments.tasks","bootstrap","E001"],"resources":{"cpu":16},"produces":["bootstrap_metrics.json"]},
+    {"id":"report","kind":"report","depends_on":["bootstrap"],"command":["python","-m","quantumbci.experiments.tasks","report","E001"],"resources":{"cpu":1},"produces":["evidence_ledger.json","report.md"]}
+  ],
+  "decision_gates": [
+    "Primary longitudinal lanes must consume neurOS GroupedEvaluationData plus serialized neurOS partition/calibration authority; QuantumBCI may not silently re-split those samples.",
+    "No subject or session may appear in both train and final evaluation partitions; target calibration examples must remain disjoint from the fixed final evaluation set.",
+    "The scientific run identity must bind the upstream raw-data fingerprint, neurOS partition fingerprint, neurOS nested-calibration fingerprint, QuantumBCI source revision, and neurOS source revision.",
+    "Foundation-model execution must inherit neurOS fail-closed adapter semantics; unavailable upstream models may not be replaced by mock or random embeddings in benchmark evidence.",
+    "The density representation must be compared against covariance/tangent-space, bilinear Gram, PCA, random-PSD, and identical-dimensional readout controls on the exact same embedding tensors.",
+    "Promotion requires a paired subject-level 95% bootstrap interval excluding zero against the strongest matched control on at least two datasets or paradigms, plus an absolute >=0.01 macro-F1/balanced-accuracy gain OR a >=0.02 absolute calibration improvement.",
+    "Off-diagonal removal must measurably reduce any claimed density-specific benefit; otherwise the result is representation compression, not evidence for a coherence-like mechanism.",
+    "Observables used in the interpretation must be stable across seeds and subject bootstrap resamples before they enter the mechanism ledger."
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "E003_contextual_order",
+  "title": "Preregistered contextual and order-effect modelling",
+  "claim_class": "quantum_inspired",
+  "objective": "Test whether non-commuting measurement models explain reproducible cue-order effects more compactly than explicit-history classical models.",
+  "datasets": ["retrospective_trial_history_dataset", "prospective_AB_BA_EEG_after_ethics_approval"],
+  "encoders": ["ERP_features", "spectral_features", "best_validated_E001_encoder"],
+  "primary_metrics": ["heldout_log_likelihood", "order_effect_delta", "complexity_adjusted_score", "replication_effect_size"],
+  "stages": [
+    {"id":"retrospective_contract","kind":"data","depends_on":[],"command":["python","-m","quantumbci.experiments.tasks","context-contract","E003"],"resources":{"cpu":2},"produces":["retrospective_contract.json"]},
+    {"id":"fit_quantum_inspired","kind":"mechanism","depends_on":["retrospective_contract"],"command":["python","-m","quantumbci.experiments.tasks","fit-contextual","E003"],"resources":{"cpu":8},"produces":["contextual_fit.json"]},
+    {"id":"fit_history_controls","kind":"model","depends_on":["retrospective_contract"],"command":["python","-m","quantumbci.experiments.tasks","fit-history-controls","E003"],"resources":{"cpu":8},"produces":["history_control_fits.json"]},
+    {"id":"retrospective_report","kind":"report","depends_on":["fit_quantum_inspired","fit_history_controls"],"command":["python","-m","quantumbci.experiments.tasks","report","E003","retrospective"],"resources":{"cpu":1},"produces":["retrospective_report.md"]},
+    {"id":"prospective_preregistration","kind":"gate","depends_on":["retrospective_report"],"command":["python","-m","quantumbci.experiments.tasks","preregister","E003"],"resources":{"cpu":1},"produces":["preregistration.json","power_simulation.json","ethics_status.json"]},
+    {"id":"prospective_analysis","kind":"statistics","depends_on":["prospective_preregistration"],"command":["python","-m","quantumbci.experiments.tasks","analyze-prospective","E003"],"resources":{"cpu":16},"produces":["prospective_metrics.json"]},
+    {"id":"replication_gate","kind":"gate","depends_on":["prospective_analysis"],"command":["python","-m","quantumbci.experiments.tasks","gate","E003","replication"],"resources":{"cpu":1},"produces":["replication_gate.json"]}
+  ],
+  "decision_gates": [
+    "Retrospective analysis is hypothesis-generating only and cannot count as replication.",
+    "Prospective human data collection is blocked until protocol registration and applicable ethics/IRB approval are recorded.",
+    "Classical controls must include history-augmented logistic/GLM, HMM or state-space history, and a capacity-matched recurrent model when data permit.",
+    "Promotion requires the AB-vs-BA effect to replicate prospectively and the contextual model to improve held-out log score after complexity matching.",
+    "Order dependence supports a contextual probability model only; it is not evidence that the neural substrate is physically quantum."
+  ]
+}
