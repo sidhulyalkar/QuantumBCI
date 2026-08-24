@@ -70,7 +70,7 @@ class PermuteDensityBasis:
                 f"{len(self.permutation)} != {value.shape[-1]}"
             )
         index = np.asarray(self.permutation, dtype=int)
-        return value[..., index, :][..., :, index]
+        return np.take(np.take(value, index, axis=-2), index, axis=-1)
 
     def metadata(self) -> Mapping[str, Any]:
         return {
