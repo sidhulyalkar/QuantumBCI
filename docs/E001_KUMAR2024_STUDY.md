@@ -1,54 +1,93 @@
 # E001 on Kumar2024
 
-This is the first real-dataset execution path for QuantumBCI's equivalence-first E001 program.
-It uses the merged neurOS longitudinal evidence authority and the public MOABB Kumar2024 motor-
-imagery dataset.
+This is QuantumBCI's first package-owned real-dataset execution path. It combines the public MOABB
+Kumar2024 motor-imagery dataset with the merged neurOS longitudinal evidence authority and the
+v0.6 equivalence-first E001 benchmark.
 
-## What this study asks
+## Scientific question
 
-The study **does not** ask whether the current density constructor contains more information than
-covariance. v0.6 already establishes that
+This study does **not** ask whether the current density constructor contains more information than
+covariance. That question is already settled for the current constructor:
 
 ```text
 rho = X^H X / Tr(X^H X)
 ```
 
-is exactly a trace-normalized Hermitian second moment.
+After optional centering, this is exactly a trace-normalized Hermitian second moment. The density
+representation is therefore information-equivalent to the corresponding normalized covariance.
 
-Instead, Kumar2024 is used to answer a stricter and more useful set of questions:
+Kumar2024 is used for the more useful empirical questions:
 
-1. can QuantumBCI preserve exact longitudinal source/calibration/evaluation authority on real EEG?
-2. how do trace normalization, covariance geometry, pooled statistics, PCA and operator
-   interventions behave under cross-day drift and increasing target calibration?
-3. do the same conclusions hold for both original Kumar2024 training cohorts (GR and PAR)?
-4. can every result be traced from original downloaded bytes through processed-data authority,
-   representation bytes, source revisions and participant-level inference?
-5. can the final evidence object be independently verified and exported without redistributing raw
-   participant data inside the QuantumBCI artifact?
+1. can QuantumBCI preserve exact source-history, calibration and final-evaluation authority on real
+   longitudinal EEG?
+2. how do normalization, covariance geometry, pooled statistics, PCA and off-diagonal interventions
+   behave under cross-day drift and increasing target calibration?
+3. do those patterns remain visible across the original GR and PAR participant cohorts?
+4. can every result be traced from selected raw source bytes through neurOS processed-data identity,
+   authority, representation bytes, code revisions and participant-level inference?
+5. can the resulting evidence object be independently checksum-verified and exported as RO-Crate
+   without redistributing raw participant EEG?
 
-A result can be scientifically useful even when the density-information novelty gate remains false.
+A negative or equivalence-preserving result is a successful scientific run.
 
-## Dataset boundary
+## Dataset contract
 
-The neurOS Kumar2024 specification fixes the MOABB interpretation used here:
+The pinned neurOS/MOABB interpretation is:
 
 - dataset id: `moabb-kumar2024`;
 - 18 participants;
-- six separate-day sessions, ordered `0` through `5` in MOABB metadata;
+- six separate-day sessions, represented as `0` through `5` by MOABB;
 - left-hand versus right-hand motor imagery;
-- subjects 1-9 preserve the original `GR` cohort label;
-- subjects 10-18 preserve the original `PAR` cohort label;
-- 8-30 Hz analysis band by default.
+- MOABB subjects 1-9 are the original GR cohort;
+- MOABB subjects 10-18 are the original PAR cohort;
+- default analysis band: 8-30 Hz;
+- native sampling rate: 512 Hz unless an explicit resample rate is supplied.
 
-MOABB includes the bar-feedback runs and excludes the car-racing runs from the online sessions.
-The source dataset is distributed through Zenodo and is recorded by neurOS as CC BY 4.0.
+Current MOABB loads only the bar-feedback runs. Racing-game files distributed in the same archive
+are not part of this declared study surface.
 
-## Exact compatibility with the neurOS model ladder
+## Raw-source fingerprint
 
-QuantumBCI deliberately reproduces the sample-authority semantics of the merged neurOS model-ladder
-runner rather than creating a look-alike split.
+Kumar2024 is distributed as one Zenodo ZIP. Current MOABB `data_path(subject)` returns the same
+extracted dataset root for every selected subject. Subject-specific selection happens inside the
+loader.
 
-For one subject and target session, the split seed is
+QuantumBCI mirrors that loader boundary rather than hashing the whole archive once per participant.
+The fingerprint adapter:
+
+1. verifies every selected MOABB subject resolves to one shared extracted root;
+2. applies the current MOABB subject mapping:
+   - subjects 1-9 -> raw subjects 1-9;
+   - subjects 10-18 -> raw subjects 11-19;
+3. selects only subject-specific GDF files under:
+
+```text
+Offline/<GR|PAR>/<subject>/**/*.gdf
+Online/<GR|PAR>/<subject>/**/*.gdf
+```
+
+4. explicitly excludes:
+
+```text
+Race/**
+```
+
+5. hashes each unique selected file once with SHA-256;
+6. derives per-subject content fingerprints;
+7. derives one aggregate fingerprint for the selected study cohort;
+8. records stable relative file names and byte counts, never machine-specific absolute paths.
+
+Changing a selected Offline/Online GDF file changes the appropriate participant and aggregate
+fingerprints. Changing an unused `Race/**` file does not.
+
+This upstream fingerprint is intentionally separate from neurOS `processed_data_sha256`, partition
+fingerprints and calibration-split fingerprints.
+
+## Exact neurOS authority compatibility
+
+QuantumBCI reuses the same prior-session protocol as the merged neurOS model ladder.
+
+For each subject and target session, the split seed is:
 
 ```text
 first_32_bits(SHA256("<base>|moabb-kumar2024|<subject>|<target-session>"))
@@ -56,51 +95,93 @@ first_32_bits(SHA256("<base>|moabb-kumar2024|<subject>|<target-session>"))
 
 with base seed `2026` by default.
 
-The case then uses:
+The case authority is:
 
 ```text
 source history   = every chronologically prior session
 target session   = one held-out session
-calibration pool = deterministic class-stratified subset of target session
-final evaluation = deterministic, immutable remainder of target session
+calibration pool = deterministic class-stratified subset of the target session
+final evaluation = deterministic immutable remainder of the target session
 ```
 
-The default evaluation fraction is `0.5`, and every calibration budget uses the same final
+The default evaluation fraction is `0.5`. Every calibration budget shares the exact same final
 evaluation examples.
 
-The resulting `LongitudinalCaseAuthority` case ID follows the same form as neurOS:
+The case ID follows the same neurOS form:
 
 ```text
 moabb-kumar2024/subject-<N>/session-<S>/split-<stable-seed>
 ```
 
-Given identical MOABB processing parameters and source data, this allows a QuantumBCI case to share
-the same authority fingerprint as the neurOS specialist/frozen/SourceWeigher ladder.
+`LongitudinalCaseAuthority.restore(data)` is called before the benchmark consumes the case. That
+revalidates processed neural bytes and the frozen evidence assignment.
 
 ## Representation under test
 
-The first lane intentionally avoids pretending a pooled neural-decoder embedding has tokens.
 MOABB epochs arrive as:
 
 ```text
-samples x EEG channels x time
+examples x EEG channels x time
 ```
 
-QuantumBCI transposes each epoch to:
+The first QuantumBCI lane uses the real temporal samples as tokens:
 
 ```text
 time tokens x EEG-channel features
 ```
 
-and runs E001 on that real token surface.
+No artificial token axis is created around a pooled decoder output.
 
-This makes the first real study primarily an **EEG covariance/operator geometry and evidence-
-authority validation study**. Foundation-model token lanes can be added later without changing the
-sample authority.
+This makes the first real study an EEG covariance/operator-geometry and evidence-authority study.
+Foundation-model token lanes can later consume the same sample authority without changing the
+scientific split.
 
-## Controls
+## Prepared feature contract
 
-Each calibration point uses the v0.6 adversarial E001 suite on exactly the same epoch tensor:
+Real EEG epochs are wide, so recomputing every representation transform at every calibration budget
+would be both expensive and scientifically ambiguous. v0.6.1 makes the adaptation boundary explicit.
+
+For one participant tensor, QuantumBCI prepares the budget-independent E001 features once:
+
+- density;
+- exact normalized covariance;
+- ordinary covariance;
+- log-covariance geometry;
+- bilinear second moment;
+- pooled mean/std;
+- diagonal density;
+- fixed off-diagonal-deletion feature surface.
+
+For each target-session case, the flattened PCA control is fit **once on chronological source
+history only**. It is then frozen for every target-calibration budget.
+
+The adaptation contract is:
+
+```json
+{
+  "static_feature_scope": "prepared_once_per_participant_tensor",
+  "pca_fit_scope": "source_history_only",
+  "target_calibration_changes": "readout_only",
+  "final_evaluation_in_representation_fit": false
+}
+```
+
+Target calibration may update the matched low-capacity readout. It does not refit PCA or any other
+representation transform. Final evaluation examples never enter representation fitting.
+
+This contract is written into:
+
+- `run.json`;
+- `study_manifest.json`;
+- `representation_index.json`;
+- `evidence_ledger.json`;
+- `report.md`.
+
+The artifact ledger is recomputed after those fields are written.
+
+## E001 controls
+
+Each calibration point evaluates the same prepared tensor surface with:
 
 - density operator;
 - exact trace-normalized covariance;
@@ -108,75 +189,60 @@ Each calibration point uses the v0.6 adversarial E001 suite on exactly the same 
 - log-covariance geometry;
 - bilinear second moment;
 - pooled mean/std;
-- train-only flattened PCA;
+- source-history-frozen flattened PCA;
 - diagonal density;
 - fixed-readout off-diagonal deletion.
 
-Density and trace-normalized covariance must remain prediction-identical. Off-diagonal deletion is
-interpreted as a cross-feature covariance intervention, not microscopic quantum coherence.
+Density and exact normalized covariance must remain prediction-identical. If that invariant breaks,
+the benchmark fails rather than silently changing the scientific interpretation.
 
-## Raw-data fingerprint
-
-Before MOABB preprocessing is consumed as evidence, the study calls the dataset's public
-`data_path(subject)` API for every selected participant and hashes the original local source files.
-
-The raw-source manifest stores only:
-
-- a stable relative/basename label;
-- byte count;
-- SHA-256;
-- per-subject content fingerprint;
-- aggregate selected-dataset fingerprint.
-
-Absolute local paths are not serialized. Moving byte-identical source data to another machine does
-not change the scientific dataset fingerprint.
-
-This raw-source fingerprint is separate from neurOS's downstream `processed_data_sha256`, partition
-fingerprint and calibration-split fingerprint.
+Off-diagonal deletion is interpreted as removal of cross-feature covariance structure. It is not a
+microscopic quantum-coherence witness.
 
 ## Full scientific identity
 
-Every case binds:
+Each case binds:
 
-1. aggregate raw-source content fingerprint;
+1. aggregate selected raw-source fingerprint;
 2. neurOS processed-data SHA-256;
 3. neurOS authority fingerprint;
 4. neurOS partition fingerprint;
 5. neurOS calibration-split fingerprint;
 6. exact time-by-channel representation SHA-256;
-7. representation/preprocessing identifier;
-8. calibration frontier and benchmark configuration;
-9. exact QuantumBCI source revision;
-10. exact neurOS source revision.
+7. representation and preprocessing identity;
+8. canonical calibration frontier;
+9. benchmark regularization parameters;
+10. PCA fit scope and dimension;
+11. exact QuantumBCI source revision;
+12. exact neurOS source revision.
 
 The study-level fingerprint additionally binds the complete set of case authority and case-study
 fingerprints.
 
 ## Participant-level inference
 
-The independent unit is the participant, not the EEG epoch.
+The independent inference unit is the participant, not the EEG window or trial.
 
 For every calibration budget and control:
 
-1. density-minus-control deltas from repeated target sessions are averaged within participant;
-2. the participant set must be identical across the calibration frontier;
-3. participants are bootstrap-resampled with replacement;
-4. the observed paired mean, 95% bootstrap interval and bootstrap probability above zero are
-   recorded.
+1. repeated held-out-session deltas are averaged within participant;
+2. the participant set must be identical across budgets;
+3. duplicate case rows fail closed;
+4. participants are bootstrap-resampled with replacement;
+5. the paired mean density-minus-control delta and 95% bootstrap interval are recorded.
 
-The normalized-covariance delta should be identically zero because that control is information-
-equivalent to the present density constructor.
+The density-minus-normalized-covariance delta is expected to be exactly zero because those two
+representations are information-equivalent under the present constructor.
 
 ## Local execution
 
-Install QuantumBCI plus the real EEG evidence profile, or co-develop against a pinned neurOS
-workspace:
+Install the real EEG profile:
 
 ```bash
 pip install -e '.[real-eeg]'
 ```
 
-Then run a two-participant final-session study:
+Run the smallest GR/PAR-crossing checkpoint:
 
 ```bash
 quantumbci-kumar2024 \
@@ -188,51 +254,55 @@ quantumbci-kumar2024 \
   --output .quantumbci/studies/E001-kumar2024
 ```
 
-Run every longitudinal target session after the cohort checkpoint has qualified:
+The source-checkout wrapper remains available at:
 
-```bash
-quantumbci-kumar2024 \
-  --subjects 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18 \
-  --all-target-sessions \
-  --budgets 0,1,2,5,10 \
-  --quantumbci-source-sha "$(git rev-parse HEAD)" \
-  --neuros-source-sha <PINNED_NEUROS_SHA> \
-  --output .quantumbci/studies/E001-kumar2024-full
+```text
+scripts/evidence/run_kumar2024_e001.py
 ```
 
-The source-checkout compatibility wrapper remains available at
-`scripts/evidence/run_kumar2024_e001.py`.
+## GitHub Actions separation
 
-## GitHub Actions execution profiles
+### `E001 Kumar2024 contract`
 
-The workflow **E001 Kumar2024 real study** is `workflow_dispatch` only. Opening a pull request never
-downloads Kumar2024.
+Runs on pull requests and main pushes, but **never downloads Kumar2024**. It installs the exact
+pinned merged neurOS authority and qualifies:
 
-It provides three scopes:
+- the installed `quantumbci-kumar2024` command;
+- routing through the canonical cached executor;
+- synthetic six-session Kumar-style data under real neurOS authority classes;
+- source-history-frozen PCA semantics;
+- density/normalized-covariance identity;
+- participant bootstrap;
+- closed-world bundle verification;
+- RO-Crate export;
+- wheel inclusion of every real-study module.
 
-### `smoke`
+### `E001 Kumar2024 real study`
 
-Defaults to subjects `1,10` and target session `5`. This crosses the GR/PAR cohort boundary while
-keeping the first real download and compute surface small.
+This workflow is `workflow_dispatch` only. Opening a pull request cannot trigger a public dataset
+download.
 
-### `cohort`
+It exposes three explicit scopes:
 
-Runs all 18 participants on target session `5`. This is the recommended first complete empirical
-checkpoint because it provides a full participant-level cohort comparison without multiplying the
-expensive train-only PCA control over every target session.
+- `smoke`: default subjects `1,10`, target session `5`;
+- `cohort`: all 18 participants, target session `5`;
+- `full-longitudinal`: all 18 participants, target sessions `1-5`.
 
-### `full-longitudinal`
+The recommended empirical ladder is:
 
-Runs all 18 participants over target sessions `1-5`. This is the complete deployment-history
-frontier and should be run after the cohort artifact is inspected and accepted.
+```text
+smoke -> inspect evidence -> cohort -> inspect cohort effects -> full-longitudinal
+```
 
-All three profiles pin neurOS to the same merged authority revision, verify the finished bundle,
-create an RO-Crate archive and upload only derived evidence. Raw EEG files are not included in the
-GitHub artifact.
+The cohort checkpoint is valuable even after the caching optimization because it provides a clean
+18-participant cross-cohort result before multiplying the number of longitudinal target cases.
+
+The real workflow verifies the finished evidence directory, creates an RO-Crate archive and uploads
+only derived study artifacts. Raw EEG is not included in the GitHub artifact.
 
 ## Evidence bundle
 
-A successful run writes:
+A successful study writes:
 
 ```text
 run.json
@@ -253,22 +323,22 @@ artifact_hashes.json
 `artifact_hashes.json` closes the directory under QuantumBCI's closed-world verifier. Missing,
 modified or unexpected top-level files invalidate the bundle.
 
-Because the directory also contains a normal `run.json`, it can be exported directly as an
-RO-Crate with `export_run_ro_crate(...)`.
+Because the directory contains a normal `run.json`, it can be exported directly with
+`export_run_ro_crate(...)`.
 
 ## Interpretation ceiling
 
-Even the full 18-participant × five-target-session study remains **quantum-inspired, offline,
+Even a completed 18-participant × five-target-session study remains **quantum-inspired, offline,
 real-dataset evidence**.
 
 It cannot establish:
 
-- extra information in the current density constructor beyond normalized covariance;
+- additional information in the current density constructor beyond normalized covariance;
 - microscopic neural quantum coherence;
 - entanglement;
-- quantum computation in brain tissue;
+- quantum computation in neural tissue;
 - closed-loop BCI superiority;
 - clinical efficacy.
 
-The most valuable outcome of this study is a trustworthy empirical base from which a genuinely
-non-equivalent operator, dynamical or contextual mechanism can be tested next.
+The purpose of this study is to establish a trustworthy empirical base for the next genuinely
+non-equivalent operator, dynamical or contextual mechanism.
