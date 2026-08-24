@@ -40,7 +40,10 @@ quantumbci-density = "quantumbci.integrations.neuros:DensityGeometryTransform"
 include = ["quantumbci*"]
 
 [tool.setuptools.package-data]
-quantumbci = ["experiments/manifests/*.json"]
+quantumbci = [
+  "experiments/manifests/*.json",
+  "schemas/*.json",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
