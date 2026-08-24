@@ -8,11 +8,13 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.5.0"
+version: "0.6.0"
 keywords:
   - neuroscience
   - EEG
   - BCI
   - quantum-inspired
   - mechanistic interpretability
+  - mathematical equivalence
+  - longitudinal evaluation
   - reproducible research
