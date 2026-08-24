@@ -123,6 +123,21 @@ def test_study_fingerprint_binds_source_revisions() -> None:
     assert first.study_fingerprint != second.study_fingerprint
 
 
+def test_study_fingerprint_is_content_addressed_not_budget_order_addressed() -> None:
+    data, representations = _fixture(11)
+    authority = _Authority("p1", "p1-s3")
+    canonical = _run(data, authority, representations, budgets=(0, 2, 4))
+    reordered = _run(data, authority, representations, budgets=(4, 0, 2, 2))
+    changed = representations.copy()
+    changed[0, 0, 0] += 1e-4
+    changed_result = _run(data, authority, changed, budgets=(0, 2, 4))
+
+    assert canonical.study_fingerprint == reordered.study_fingerprint
+    assert canonical.representation_sha256 == reordered.representation_sha256
+    assert canonical.study_fingerprint != changed_result.study_fingerprint
+    assert canonical.representation_sha256 != changed_result.representation_sha256
+
+
 def test_longitudinal_case_requires_complete_upstream_provenance() -> None:
     data, representations = _fixture(10)
     authority = _Authority("p1", "p1-s3")
