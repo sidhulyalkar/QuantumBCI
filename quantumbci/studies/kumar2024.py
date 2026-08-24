@@ -2,9 +2,10 @@
 
 The acquisition layer is intentionally opt-in: importing QuantumBCI never downloads a
 public dataset. ``run_kumar2024_study`` uses neurOS/MOABB only when explicitly invoked,
-hashes the original files returned by MOABB ``data_path()``, creates the same deterministic
-longitudinal case authority as the neurOS model-ladder protocol, and then evaluates
-QuantumBCI's equivalence-first E001 controls on a genuine time-by-channel token surface.
+hashes the original bar-feedback GDF files that can influence the selected subjects,
+creates the same deterministic longitudinal case authority as the neurOS model-ladder
+protocol, and evaluates QuantumBCI's equivalence-first E001 controls on a genuine
+time-by-channel token surface.
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -94,43 +96,75 @@ def _package_versions() -> dict[str, str | None]:
     return values
 
 
-def _flatten_path_values(value: Any) -> list[Path]:
-    if value is None:
-        return []
+_MOABB_TO_RAW = {i: i for i in range(1, 10)}
+_MOABB_TO_RAW.update({i: i + 1 for i in range(10, 19)})
+
+
+def _dataset_root(value: Any) -> Path:
+    """Normalize Kumar2024 ``data_path`` output to its extracted dataset root."""
+
     if isinstance(value, (str, bytes, os.PathLike)):
-        return [Path(value)]
-    if isinstance(value, Mapping):
-        paths: list[Path] = []
-        for item in value.values():
-            paths.extend(_flatten_path_values(item))
-        return paths
-    if isinstance(value, Iterable):
-        paths = []
-        for item in value:
-            paths.extend(_flatten_path_values(item))
-        return paths
-    return []
-
-
-def _source_files(value: Any) -> tuple[Path, ...]:
-    files: dict[str, Path] = {}
-    for raw in _flatten_path_values(value):
-        path = raw.expanduser().resolve()
-        if not path.exists():
-            raise FileNotFoundError(f"MOABB data_path returned a missing path: {path}")
-        if path.is_file():
-            files[str(path)] = path
-        elif path.is_dir():
-            for child in path.rglob("*"):
-                if child.is_file():
-                    resolved = child.resolve()
-                    files[str(resolved)] = resolved
-    if not files:
+        roots = [Path(value)]
+    elif isinstance(value, Sequence):
+        roots = [Path(item) for item in value if isinstance(item, (str, bytes, os.PathLike))]
+    else:
+        roots = []
+    resolved = sorted({path.expanduser().resolve() for path in roots}, key=str)
+    if len(resolved) != 1:
         raise ValueError(
-            "MOABB data_path did not resolve to source files; raw-data fingerprinting "
-            "is required for a promoted Kumar2024 study"
+            "Kumar2024 data_path must resolve to exactly one extracted dataset root; "
+            f"got {len(resolved)}"
         )
-    return tuple(sorted(files.values(), key=lambda path: str(path)))
+    root = resolved[0]
+    if not root.is_dir():
+        raise FileNotFoundError(f"Kumar2024 extracted dataset root does not exist: {root}")
+    return root
+
+
+def _subject_directory(parent: Path, raw_subject: int, suffix: str) -> Path | None:
+    if not parent.is_dir():
+        return None
+    for label in (f"{raw_subject:02d}", f"{raw_subject:03d}", str(raw_subject)):
+        candidate = parent / f"Subject_{label}_{suffix}"
+        if candidate.is_dir():
+            return candidate
+    pattern = re.compile(rf"Subject_0*{raw_subject}_{re.escape(suffix)}$")
+    for child in sorted(parent.iterdir()):
+        if child.is_dir() and pattern.fullmatch(child.name):
+            return child
+    return None
+
+
+def _gdf_files(directory: Path | None) -> tuple[Path, ...]:
+    if directory is None:
+        return ()
+    files = [*directory.rglob("*.gdf"), *directory.rglob("*.GDF")]
+    return tuple(sorted({path.resolve() for path in files if path.is_file()}, key=str))
+
+
+def _kumar_subject_source_files(root: Path, subject: int) -> tuple[Path, ...]:
+    """Return only the bar-feedback source files MOABB can use for one subject.
+
+    Kumar2024 ships one extracted dataset tree for every ``data_path(subject)`` call.
+    The actual loader reads subject-specific GDF files under ``Offline`` and ``Online``
+    and does not consume ``Race``. Mirroring that public source layout prevents the raw
+    fingerprint from duplicating the whole archive once per participant or hashing data
+    that cannot influence the declared MOABB paradigm.
+    """
+
+    if subject not in _MOABB_TO_RAW:
+        raise ValueError("Kumar2024 subject must lie in 1..18")
+    raw_subject = _MOABB_TO_RAW[int(subject)]
+    group = "GR" if raw_subject <= 9 else "PAR"
+    offline = _subject_directory(root / "Offline" / group, raw_subject, "Offline")
+    online = _subject_directory(root / "Online" / group, raw_subject, "Online")
+    files = tuple(sorted({*_gdf_files(offline), *_gdf_files(online)}, key=str))
+    if not files:
+        raise FileNotFoundError(
+            f"no Kumar2024 bar-feedback GDF files found for MOABB subject {subject} "
+            f"(raw subject {raw_subject}) under {root}"
+        )
+    return files
 
 
 def fingerprint_raw_dataset(
@@ -140,11 +174,15 @@ def fingerprint_raw_dataset(
     dataset_key: str = "kumar2024",
     dataset_id: str = "moabb-kumar2024",
 ) -> dict[str, Any]:
-    """Hash the original local files returned by MOABB ``data_path``.
+    """Hash the exact original Kumar2024 source files relevant to selected subjects.
 
-    Absolute local paths are never written to the scientific manifest. File content,
-    size, and stable relative/basename labels define the fingerprint so moving the
-    same downloaded bytes to another machine does not change the dataset identity.
+    Current MOABB Kumar2024 ``data_path(subject)`` downloads one Zenodo ZIP and returns
+    the same extracted root for every subject. This function verifies that invariant,
+    selects only each subject's Offline/Online bar-feedback GDF files, hashes every
+    unique file once, and derives participant plus aggregate content fingerprints.
+
+    Absolute local paths are never serialized. Moving byte-identical source data to a
+    different machine therefore does not change scientific identity.
     """
 
     getter = getattr(dataset, "data_path", None)
@@ -153,60 +191,73 @@ def fingerprint_raw_dataset(
     normalized_subjects = tuple(sorted(set(int(value) for value in subjects)))
     if not normalized_subjects:
         raise ValueError("subjects must not be empty")
+    if any(value not in _MOABB_TO_RAW for value in normalized_subjects):
+        raise ValueError("Kumar2024 subjects must lie in 1..18")
 
-    hash_cache: dict[str, str] = {}
+    roots = {
+        _dataset_root(getter(int(subject)))
+        for subject in normalized_subjects
+    }
+    if len(roots) != 1:
+        raise ValueError(
+            "Kumar2024 selected subjects did not resolve to one shared extracted root; "
+            "the upstream data_path contract changed and the raw fingerprint adapter "
+            "must be reviewed before evidence generation"
+        )
+    root = next(iter(roots))
+
+    file_records: dict[str, dict[str, Any]] = {}
     subject_records: dict[str, Any] = {}
     for subject in normalized_subjects:
-        returned = getter(int(subject))
-        roots = tuple(path.expanduser().resolve() for path in _flatten_path_values(returned))
-        files = _source_files(returned)
-        records: list[dict[str, Any]] = []
-        for path in files:
-            key = str(path)
-            digest = hash_cache.get(key)
-            if digest is None:
-                digest = _sha256_file(path)
-                hash_cache[key] = digest
-
-            labels: list[str] = []
-            for root in roots:
-                if root.is_dir():
-                    try:
-                        labels.append(str(path.relative_to(root)).replace(os.sep, "/"))
-                    except ValueError:
-                        continue
-                elif root == path:
-                    labels.append(path.name)
-            label = min(labels, key=lambda item: (len(item), item)) if labels else path.name
-            records.append(
-                {
+        subject_files = _kumar_subject_source_files(root, int(subject))
+        subject_content: list[dict[str, Any]] = []
+        for path in subject_files:
+            label = str(path.relative_to(root)).replace(os.sep, "/")
+            record = file_records.get(label)
+            if record is None:
+                record = {
                     "name": label,
                     "bytes": int(path.stat().st_size),
-                    "sha256": digest,
+                    "sha256": _sha256_file(path),
                 }
-            )
-        records.sort(key=lambda item: (item["name"], item["sha256"], item["bytes"]))
-        subject_payload = {
-            "subject": int(subject),
-            "files": records,
-        }
-        subject_payload["fingerprint"] = sha256(
-            _canonical_json(subject_payload).encode("utf-8")
-        ).hexdigest()
-        subject_records[str(subject)] = subject_payload
+                file_records[label] = record
+            subject_content.append(record)
 
-    aggregate_payload = {
-        "schema_version": 1,
-        "kind": "raw_source_content_fingerprint",
+        subject_content.sort(key=lambda item: item["name"])
+        subject_identity = {
+            "subject": int(subject),
+            "files": subject_content,
+        }
+        subject_records[str(subject)] = {
+            "subject": int(subject),
+            "file_names": [item["name"] for item in subject_content],
+            "fingerprint": sha256(
+                _canonical_json(subject_identity).encode("utf-8")
+            ).hexdigest(),
+        }
+
+    unique_files = [file_records[name] for name in sorted(file_records)]
+    aggregate_identity = {
+        "schema_version": 2,
+        "kind": "kumar2024_selected_raw_source_content_fingerprint",
         "dataset_key": str(dataset_key),
         "dataset_id": str(dataset_id),
         "subjects": list(normalized_subjects),
+        "files": unique_files,
         "by_subject": subject_records,
+        "selection": {
+            "include": ["Offline/<group>/<subject>/**/*.gdf", "Online/<group>/<subject>/**/*.gdf"],
+            "exclude": ["Race/**"],
+            "moabb_subject_to_raw_subject": {
+                str(subject): int(_MOABB_TO_RAW[subject]) for subject in normalized_subjects
+            },
+        },
     }
-    aggregate_payload["fingerprint"] = sha256(
-        _canonical_json(aggregate_payload).encode("utf-8")
+    payload = dict(aggregate_identity)
+    payload["fingerprint"] = sha256(
+        _canonical_json(aggregate_identity).encode("utf-8")
     ).hexdigest()
-    return aggregate_payload
+    return payload
 
 
 @dataclass(frozen=True)
