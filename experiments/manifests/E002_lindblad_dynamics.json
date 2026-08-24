@@ -3,13 +3,13 @@
   "id": "E002_lindblad_dynamics",
   "title": "Identifiable Lindblad-style latent neural dynamics",
   "claim_class": "quantum_inspired",
-  "objective": "Test whether low-dimensional open-system dynamics provide more identifiable and intervention-predictive latent trajectories than classical dynamical controls.",
+  "objective": "Determine whether a gauge-fixed open-system parameterization provides stable constraints or intervention-predictive structure beyond its exact classical affine state-space representation, while explicitly rejecting arbitrary Hamiltonian/collapse-matrix identifiability claims.",
   "datasets": ["synthetic_parameter_recovery", "EEGMMIDB_continuous", "Sleep-EDF_transition_sequences"],
   "encoders": ["best_E001_encoder_or_raw_low_dimensional_features"],
-  "primary_metrics": ["heldout_nll", "multi_step_forecast_error", "trace_distance", "parameter_recovery_error", "bootstrap_parameter_icc"],
+  "primary_metrics": ["heldout_nll", "multi_step_forecast_error", "trace_distance", "parameter_recovery_error", "bootstrap_parameter_icc", "affine_equivalence_error"],
   "stages": [
-    {"id":"synthetic_grid","kind":"simulation","depends_on":[],"command":["python","-m","quantumbci.experiments.tasks","synthetic-recovery","E002"],"resources":{"cpu":16},"produces":["synthetic_recovery.json"]},
-    {"id":"identifiability_gate","kind":"gate","depends_on":["synthetic_grid"],"command":["python","-m","quantumbci.experiments.tasks","gate","E002","identifiability"],"resources":{"cpu":1},"produces":["identifiability_gate.json"]},
+    {"id":"synthetic_grid","kind":"simulation","depends_on":[],"command":["python","-m","quantumbci.experiments.tasks","synthetic-recovery","E002","--seed","2027","--noise-std","0.003","--output","synthetic_recovery.json"],"resources":{"cpu":16},"produces":["synthetic_recovery.json"]},
+    {"id":"identifiability_gate","kind":"gate","depends_on":["synthetic_grid"],"command":["python","-m","quantumbci.experiments.tasks","gate","E002","identifiability","--input","synthetic_recovery.json","--output","identifiability_gate.json"],"resources":{"cpu":1},"produces":["identifiability_gate.json"]},
     {"id":"trajectory_contract","kind":"data","depends_on":["identifiability_gate"],"command":["python","-m","quantumbci.experiments.tasks","trajectory-contract","E002"],"resources":{"cpu":4},"produces":["trajectory_index.json"]},
     {"id":"fit_open_system","kind":"mechanism","depends_on":["trajectory_contract"],"command":["python","-m","quantumbci.experiments.tasks","fit-lindblad","E002"],"resources":{"cpu":16},"produces":["lindblad_fits.json","mechanism_observables.json"]},
     {"id":"fit_classical_controls","kind":"model","depends_on":["trajectory_contract"],"command":["python","-m","quantumbci.experiments.tasks","fit-dynamics-controls","E002"],"resources":{"cpu":16},"produces":["classical_fits.json"]},
@@ -18,10 +18,12 @@
     {"id":"report","kind":"report","depends_on":["bootstrap"],"command":["python","-m","quantumbci.experiments.tasks","report","E002"],"resources":{"cpu":1},"produces":["evidence_ledger.json","report.md"]}
   ],
   "decision_gates": [
-    "Synthetic promotion requires median normalized recovery error <=0.20 for identifiable Hamiltonian/collapse parameters at the preregistered moderate-SNR tier and no systematic sign inversion.",
-    "Real-data comparisons must include LDS/Kalman, VAR/damped-oscillator, switching-state, and a flexible nonlinear control when sample size permits.",
-    "A mechanistic claim requires held-out predictive improvement plus bootstrap parameter stability (target ICC >=0.60) and intervention-direction consistency.",
-    "If a classical state-space model matches predictive performance and produces more stable parameters, the Lindblad parameterization is not promoted.",
-    "No fitted latent collapse/dephasing parameter may be interpreted as microscopic biological decoherence without an independent physical measurement."
+    "For a fully observed qubit density state, the time-homogeneous GKSL/Lindblad generator must be treated as exactly equivalent to a three-dimensional classical affine Bloch ODE d r / dt = A r + b; Lindblad notation alone is not dynamical-information novelty.",
+    "Synthetic recovery claims must use a declared canonical gauge or generator-level invariants. Hamiltonian identity shifts, collapse-operator global phases, and unitary mixing of a multi-channel collapse basis are not separately identifiable mechanisms.",
+    "Synthetic promotion to the real-trajectory stage requires median normalized recovery error <=0.20 for the declared gauge-fixed Hamiltonian/dephasing/relaxation family at the preregistered moderate-SNR tier, no systematic Hamiltonian sign inversion, an affine-equivalence witness, and gauge-nonidentifiability witnesses.",
+    "Real-data comparisons must include the exact affine/LDS control corresponding to the fitted state surface, plus LDS/Kalman, VAR/damped-oscillator, switching-state, and a flexible nonlinear control when sample size permits.",
+    "A mechanistic claim requires held-out predictive improvement or a clear complexity/stability advantage, bootstrap parameter stability (target ICC >=0.60), and intervention-direction consistency. Equivalent predictive performance cannot be described as uniquely Lindblad information.",
+    "If a classical state-space model matches predictive performance and produces more stable or simpler parameters, the Lindblad parameterization is not promoted.",
+    "No fitted latent collapse/dephasing parameter may be interpreted as microscopic biological decoherence without an independent physical measurement and discriminating perturbation."
   ]
 }
