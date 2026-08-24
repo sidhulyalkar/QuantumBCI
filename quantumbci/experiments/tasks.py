@@ -15,7 +15,11 @@ from typing import Any
 
 import numpy as np
 
-from ..e002_synthetic import run_e002_synthetic_recovery_grid
+from ..e002_synthetic import (
+    CANONICAL_STRUCTURE_RESIDUAL_MAX,
+    CLASSICAL_ADVERSARY_RESIDUAL_MIN,
+    run_e002_synthetic_recovery_grid,
+)
 from ..equivalence import audit_density_covariance_equivalence
 
 
@@ -25,13 +29,7 @@ def _write_json(output: Path, payload: dict[str, Any]) -> None:
 
 
 def _density_covariance_gate(*, output: Path, atol: float) -> dict[str, Any]:
-    """Materialize the exact E001 density/covariance equivalence contract.
-
-    The identity ``rho = X^H X / Tr(X^H X)`` is algebraic. The deterministic
-    real/complex probes below are regression witnesses that our implementation
-    continues to realize that identity within numerical tolerance. They are not
-    empirical neuroscience evidence.
-    """
+    """Materialize the exact E001 density/covariance equivalence contract."""
 
     if atol <= 0:
         raise ValueError("atol must be positive")
@@ -123,41 +121,65 @@ def _e002_identifiability_gate(
     sign_inversions = int(source.get("systematic_sign_inversions", -1))
     affine_equivalence = bool(source.get("affine_equivalence_pass", False))
     gauge_witness = bool(source.get("gauge_nonidentifiability_witness_pass", False))
-    canonical_recovery = bool(source.get("synthetic_identifiability_gate_pass", False))
+    max_structure_residual = float(
+        source.get("max_canonical_structure_residual", float("inf"))
+    )
+    canonical_structure = bool(source.get("canonical_structure_pass", False))
+    adversary = source.get("classical_adversary", {})
+    if not isinstance(adversary, dict):
+        adversary = {}
+    adversary_residual = float(
+        adversary.get("canonical_structure_residual", float("-inf"))
+    )
+    adversary_rejected = bool(adversary.get("rejected_as_canonical_family", False))
+    source_gate = bool(source.get("synthetic_identifiability_gate_pass", False))
+
     passed = bool(
         median_error <= 0.20
         and sign_inversions == 0
         and affine_equivalence
         and gauge_witness
-        and canonical_recovery
+        and canonical_structure
+        and max_structure_residual <= CANONICAL_STRUCTURE_RESIDUAL_MAX
+        and adversary_rejected
+        and adversary_residual >= CLASSICAL_ADVERSARY_RESIDUAL_MIN
+        and source_gate
     )
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "pass" if passed else "fail",
         "experiment": "E002",
-        "gate": "synthetic-identifiability",
+        "gate": "synthetic-identifiability-and-specificity",
         "claim_class": "quantum_inspired",
         "source_artifact": str(input_path),
         "criteria": {
             "median_normalized_recovery_error_max": 0.20,
             "systematic_sign_inversions_max": 0,
+            "canonical_structure_residual_max": CANONICAL_STRUCTURE_RESIDUAL_MAX,
+            "classical_adversary_residual_min": CLASSICAL_ADVERSARY_RESIDUAL_MIN,
             "require_affine_equivalence_witness": True,
             "require_gauge_nonidentifiability_witness": True,
+            "require_noncanonical_classical_adversary_rejection": True,
         },
         "observed": {
             "median_normalized_recovery_error": median_error,
             "systematic_sign_inversions": sign_inversions,
             "affine_equivalence_pass": affine_equivalence,
             "gauge_nonidentifiability_witness_pass": gauge_witness,
-            "canonical_recovery_pass": canonical_recovery,
+            "max_canonical_structure_residual": max_structure_residual,
+            "canonical_structure_pass": canonical_structure,
+            "classical_adversary_structure_residual": adversary_residual,
+            "classical_adversary_rejected": adversary_rejected,
+            "source_synthetic_gate_pass": source_gate,
         },
         "trajectory_contract_stage_eligible": passed,
         "dynamical_information_novel": False,
         "physical_quantum_promotion_eligible": False,
         "interpretation": (
-            "Passing this gate means a declared gauge-fixed canonical parameter family "
-            "can be recovered from moderate-noise synthetic trajectories. It does not "
-            "make the qubit Lindblad trajectory information-distinct from its exact "
+            "Passing this gate means the declared gauge-fixed canonical family is both "
+            "recoverable under the preregistered synthetic noise tier and specific enough "
+            "to reject an explicit stable noncanonical affine look-alike. It still does "
+            "not make the qubit Lindblad trajectory information-distinct from its exact "
             "classical affine Bloch representation and does not support a physical neural "
             "quantum claim."
         ),
