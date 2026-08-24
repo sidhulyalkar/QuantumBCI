@@ -21,7 +21,7 @@ The project separates four claim classes that are often blurred together:
 
 ## Equivalence first
 
-Before benchmarking a quantum-looking representation, QuantumBCI now asks whether it is actually
+Before benchmarking a quantum-looking representation, QuantumBCI asks whether it is actually
 information-distinct from an ordinary classical statistic.
 
 For the current density constructor,
@@ -164,6 +164,47 @@ token geometry.
 
 See the [neurOS integration guide](docs/NEUROS_INTEGRATION.md).
 
+## First real study: Kumar2024
+
+v0.6.1 turns that longitudinal contract into an explicit real-dataset workflow for MOABB
+Kumar2024. The study uses genuine MOABB epochs as `time tokens × EEG-channel features`, reproduces
+the neurOS model-ladder case-seed and authority semantics, hashes the original files returned by
+MOABB `data_path(subject)`, and writes a closed-world evidence bundle that can be exported directly
+as RO-Crate.
+
+Install the real EEG profile:
+
+```bash
+pip install -e '.[real-eeg]'
+```
+
+Then run the deliberately small GR/PAR-crossing checkpoint:
+
+```bash
+quantumbci-kumar2024 \
+  --subjects 1,10 \
+  --held-out-sessions 5 \
+  --budgets 0,1,2,5,10 \
+  --quantumbci-source-sha "$(git rev-parse HEAD)" \
+  --neuros-source-sha <PINNED_NEUROS_SHA> \
+  --output .quantumbci/studies/E001-kumar2024
+```
+
+The GitHub Actions **E001 Kumar2024 real study** workflow is manual-only and offers three scopes:
+
+- `smoke`: subjects 1 and 10, final session;
+- `cohort`: all 18 participants, final session;
+- `full-longitudinal`: all 18 participants, target sessions 1-5.
+
+Normal pushes and pull requests never download the public dataset. The real workflow uploads only
+derived evidence and a verified RO-Crate, not raw EEG files.
+
+This study still cannot promote the current density constructor as information-novel. Its role is to
+establish a trustworthy empirical and provenance base for the next genuinely non-equivalent
+mechanism.
+
+See [E001 on Kumar2024](docs/E001_KUMAR2024_STUDY.md).
+
 ## Portable study recipes and evidence objects
 
 For work that should survive outside one machine or one lab, use a recipe:
@@ -225,6 +266,12 @@ Released neurOS-compatible packages:
 pip install -e '.[neuros]'
 ```
 
+Real MOABB/neurOS EEG study stack:
+
+```bash
+pip install -e '.[real-eeg]'
+```
+
 Shared causal-evidence layer:
 
 ```bash
@@ -254,9 +301,10 @@ quantumbci demo                    compact mechanism demonstration
 
 quantumbci-audit density ...       test density / normalized-covariance equivalence
 quantumbci-audit e001 ...          run the adversarial E001 representation controls
+quantumbci-kumar2024 ...           run the opt-in real Kumar2024 longitudinal study
 ```
 
-All important commands support machine-readable JSON output.
+All important commands support machine-readable output or artifact bundles.
 
 ## Research kernel
 
@@ -265,6 +313,7 @@ quantumbci/
 ├── equivalence.py        # mathematical equivalence audits before empirical claims
 ├── benchmarking.py       # frozen-token representation + classical-control gauntlets
 ├── longitudinal.py       # neurOS-authoritative calibration-frontier E001 execution
+├── studies/              # opt-in real-dataset study acquisition + evidence bundles
 ├── audit_cli.py          # installed `quantumbci-audit` surface
 ├── workbench.py          # config, run registry, smoke study, HTML report
 ├── recipes.py            # portable, content-addressed study contracts
@@ -295,7 +344,8 @@ The research ladder is intentionally adversarial:
 
 - **E001 operator geometry:** exact density/covariance equivalence audit first, then identical token
   tensors, merged neurOS longitudinal authority, normalized/ordinary/log covariance, bilinear,
-  pooled, PCA and intervention controls, followed by participant-level inference.
+  pooled, PCA and intervention controls, followed by participant-level inference. Kumar2024 is the
+  first package-owned real execution surface.
 - **E002 open-system dynamics:** synthetic parameter recovery and equivalence-to-classical-dynamics
   audit first, then Lindblad-style latent dynamics against LDS/Kalman, VAR, damped oscillator,
   switching-state and nonlinear controls.
@@ -306,7 +356,7 @@ The research ladder is intentionally adversarial:
 - **E005 physical quantum mechanism screen:** requires an identified substrate, operational witness,
   discriminating perturbation, detection floor, strongest classical mimic and replication design.
 
-The E001 manifest now contains a real executable mathematical stage:
+The E001 manifest contains a real executable mathematical stage:
 
 ```bash
 python -m quantumbci.experiments.tasks \
@@ -314,8 +364,8 @@ python -m quantumbci.experiments.tasks \
   --output equivalence_audit.json
 ```
 
-Later dataset/model stages remain fail-closed until their executors are implemented. QuantumBCI does
-not fabricate placeholder artifacts to make a DAG look complete.
+Dataset/model orchestration stages remain fail-closed until their executors are explicitly wired.
+The Kumar2024 study is a separate opt-in real-study surface rather than a normal-CI side effect.
 
 Machine-readable contracts live in `experiments/manifests/`:
 
@@ -327,7 +377,8 @@ quantumbci experiments plan experiments/manifests/E001_density_geometry.json \
 ```
 
 A plan ID is deliberately weaker than a scientific run ID. Real studies additionally bind raw data,
-processed data, representation fingerprints, and immutable evidence authority.
+processed data, representation fingerprints, immutable evidence authority and both repository
+revisions.
 
 ## Shared mechanistic evidence
 
@@ -354,12 +405,16 @@ A negative scientific finding is allowed to be a successful software run. Failin
 makes a downstream claim ineligible; it does not turn falsification into an infrastructure error.
 
 CI qualifies Python 3.10–3.12, installed workbench/recipe/export/audit surfaces, wheel contents, and
-the real neurOS bridge against an exact merged neurOS longitudinal-authority revision.
+the real neurOS bridge against an exact merged neurOS longitudinal-authority revision. A separate
+Kumar2024 contract workflow qualifies the real-study package against synthetic six-session data and
+the actual neurOS authority classes without downloading the public dataset.
 
 ## Reading context
 
 - Quantum cognition can use quantum probability without requiring quantum brain physics:
   Pothos & Busemeyer (2022), https://pubmed.ncbi.nlm.nih.gov/34546804/
+- Kumar2024 dataset/paper: https://doi.org/10.5281/zenodo.10694880 and
+  https://doi.org/10.1093/pnasnexus/pgae076
 - LaBraM (ICLR 2024): https://openreview.net/forum?id=QzTpTRVtrP
 - EEGPT (NeurIPS 2024): https://github.com/BINE022/EEGPT
 - 2026 EEG foundation-model benchmark: https://arxiv.org/abs/2601.17883
@@ -373,6 +428,8 @@ the real neurOS bridge against an exact merged neurOS longitudinal-authority rev
 - **v0.4:** usable local workbench + frozen-embedding benchmark
 - **v0.5:** portable recipes + verifiable RO-Crate/BIDS-aware evidence
 - **v0.6:** equivalence-first E001 + merged neurOS longitudinal authority + participant inference
+- **v0.6.1:** package-owned Kumar2024 real-study executor + raw-source fingerprint chain + opt-in
+  smoke/cohort/full-longitudinal workflows
 - **v0.7:** Lindblad-vs-LDS/oscillator implementation after mathematical identifiability gates
 - **v0.8:** preregistered contextual/order-effect experiment with classical adversaries
 - **v0.9:** quantum-hardware/resource sandbox only for hypotheses surviving the prior ladder
