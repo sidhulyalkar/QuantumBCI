@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum-bci"
+version = "0.2.0"
+description = "A falsifiable research workbench for quantum, quantum-inspired, and classical models of neural signals."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Sidharth Hulyalkar"}]
+dependencies = [
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+quantum = [
+  "qiskit>=1.2",
+  "qiskit-aer>=0.15",
+]
+
+[tool.setuptools.packages.find]
+include = ["quantumbci*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

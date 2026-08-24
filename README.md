@@ -1,90 +1,155 @@
-# Quantum-Enhanced Signal Processing for Brain-Computer Interfaces
+# QuantumBCI
 
-This project demonstrates the integration of quantum and classical signal processing techniques for brain-computer interface (BCI) applications. It includes modules for generating and simulating quantum Fourier transforms (QFT) and for implementing both classical and quantum-enhanced Kalman filters. These tools explore how quantum algorithms could eventually enhance the processing and tracking of neural signals.
+**A falsifiable workbench for quantum, quantum-inspired, and classical models of neural signals.**
 
-## File Structure
-- project/
-  - qfft_module.py
-  - qkalman_module.py
-  - QFT_Notebook.ipynb
-  - qKalmanFilter_Notebook.ipynb
-  - README.md
+QuantumBCI began as a small QFT/Kalman demonstration. v0.2 turns it into a research kernel for a
+harder question: **does a specific quantum-structured mechanism add identifiable, reproducible
+value to neural modelling after strong classical alternatives are tested?**
 
-## Module Descriptions
+The project deliberately separates four ideas that are often blurred together:
 
-### `qfft_module.py`
-- **Purpose:**  
-  Implements functions to:
-  - Generate a Quantum Fourier Transform (QFT) circuit using Qiskit.
-  - Compute a classical Fast Fourier Transform (FFT) on simulated EEG-like signals.
-  - Compare QFT simulation outcomes with classical FFT results.
+1. **Classical controls** such as FFT and Kalman/state-space models.
+2. **Quantum-inspired models** that use density operators, non-commuting observables, or open-system
+   dynamics as mathematical inductive biases without claiming the brain is physically quantum.
+3. **Quantum algorithms** such as QFT/QLSA, whose value must include state preparation, circuit,
+   sampling, noise, and readout costs.
+4. **Physical quantum neural hypotheses**, which require independent operational evidence about the
+   biological substrate. Model fit is not that evidence.
 
-- **Key Functions:**  
-  - `generate_qft_circuit(n)`: Creates an n-qubit QFT circuit with measurements.
-  - `classical_fft(signal)`: Computes the FFT of a signal.
-  - `simulate_qft_circuit(circuit, shots)`: Simulates a given QFT circuit using Qiskit’s Aer simulator.
+> **Current scientific stance:** this repository implements useful quantum mathematics and quantum
+> algorithm reference paths, but it does **not** claim that neural tissue exhibits biologically
+> functional entanglement, long-lived coherence, or a demonstrated quantum computational advantage.
 
-### `qkalman_module.py`
-- **Purpose:**  
-  Provides implementations for:
-  - A classical Kalman filter for tracking neural signal changes.
-  - A quantum-enhanced Kalman filter where the only difference is in the matrix inversion step.
+## Why this direction
 
-- **Key Functions:**  
-  - `classical_kalman_filter(zs, A, H, Q, R, x0, P0)`: Runs the standard Kalman filter.
-  - `quantum_matrix_inversion(M, method="classical")`: By default, uses `np.linalg.inv(M)` but can be configured to use a prototype HHL-based inversion (`quantum_matrix_inversion_hhl`) in the future.
-  - `quantum_kalman_filter(zs, A, H, Q, R, x0, P0, inversion_method="classical")`: Runs the Kalman filter using the selected inversion method.
+Modern BCI modelling now includes pretrained EEG representations such as LaBraM, EEGPT, BrainWave,
+and NeuroLM. A useful QuantumBCI experiment should therefore ask whether a quantum-structured layer
+adds **incremental representation or mechanism value** on identical raw data or frozen embeddings,
+not whether it can outperform a toy sine-wave baseline.
 
-## Notebook Descriptions
+The most interesting near-term hypotheses are:
 
-### `QFT_Notebook.ipynb`
-- **Overview:**  
-  Demonstrates how to:
-  - Generate and visualize a QFT circuit.
-  - Simulate the QFT circuit using Qiskit's Aer simulator.
-  - Compute and compare a classical FFT on simulated EEG-like data.
+- **Density geometry:** are trace-one PSD latent states and their observables useful across subjects?
+- **Open-system dynamics:** do interpretable Hamiltonian/collapse parameters capture latent neural
+  transitions better than LDS/Kalman/neural-ODE controls?
+- **Contextuality:** do non-commuting measurement models predict preregistered cue/order effects more
+  compactly than history-aware classical models?
+- **Quantum algorithms:** can a *specific observable-level* neural computation justify end-to-end
+  QFT/QLSA/variational-circuit resources?
+- **Physical mechanisms:** can an experiment operationally distinguish a proposed non-classical
+  biological mechanism from classical nonlinear/stochastic dynamics?
 
-- **Highlights:**  
-  - Visualizations of the QFT circuit and FFT plots.
-  - Side-by-side comparison of quantum and classical Fourier transform methods.
+See [the research agenda](docs/RESEARCH_AGENDA.md), [mechanism cards](docs/MECHANISM_CARDS.md), and
+[interpretability protocol](docs/INTERPRETABILITY_PROTOCOL.md).
 
-### `KalmanFilter_Notebook.ipynb`
-- **Overview:**  
-  Illustrates the tracking of complex, realistic EEG-like signals using:
-  - A classical Kalman filter.
-  - A quantum-enhanced Kalman filter (with a placeholder for quantum matrix inversion).
+## Research kernel
 
-- **Highlights:**  
-  - Simulation of realistic EEG amplitude envelopes featuring baseline modulation and transient spikes.
-  - Visual comparisons of the true signal, noisy measurements, and estimates from both filters.
-  - Performance evaluations using metrics such as MSE, RMSE, MAE, and Pearson correlation.
-  - Additional plots (time-series, scatter plots, and bar charts) to assess and compare filter performance.
-
-## Requirements & Installation
-
-This project requires:
-- Python 3.9+
-- Qiskit and Qiskit-Aer (for quantum circuit simulation)
-- NumPy, SciPy, Matplotlib, and Pandas
-- pylatexenc (for LaTeX rendering in Qiskit circuits)
-
-You can install the necessary dependencies using pip or conda:
-
-```bash
-pip install qiskit qiskit-aer numpy scipy matplotlib pandas pylatexenc
-
-conda install -c conda-forge qiskit qiskit-aer numpy scipy matplotlib pandas pylatexenc
+```text
+quantumbci/
+├── claims.py            # claim classes + falsification contracts
+├── spectral.py          # complex FFT + correct ideal-QFT measurement semantics
+├── states.py            # density operators, purity, entropy, coherence
+├── open_system.py       # transparent Lindblad dynamics
+├── contextuality.py     # non-commuting operators and order effects
+├── kalman.py            # stable classical Kalman + QLSA suitability diagnostics
+├── foundation.py        # frozen foundation-token -> density-state bridge
+├── interpretability.py  # mechanism signatures, ablations, stability
+└── signals.py           # deterministic synthetic test signals
 ```
 
-## How to Run
-Place all files in the same directory.
-Run the Notebooks:
-Open QFT_Notebook.ipynb in Jupyter Notebook or JupyterLab and execute the cells sequentially to view the QFT and FFT demonstrations.
-Open KalmanFilter_Notebook.ipynb to simulate EEG signals and apply both the classical and quantum-enhanced Kalman filters. Remember to reload the modules (qfft_module.py and qkalman_module.py) if you make changes.
+The original `qfft_module.py` and `qkalman_module.py` remain as compatibility surfaces, but their
+scientific semantics are corrected. In particular:
 
-## Notes
-### Quantum-Enhanced Kalman Filter:
-Currently, the quantum-enhanced Kalman filter uses a placeholder for the quantum matrix inversion step (i.e., it calls the classical inversion routine). A prototype version based on the HHL algorithm is provided as an example, but practical benefits will be seen only when running on a true quantum device with a suitable quantum subroutine.
+- QFT computational-basis probabilities are no longer presented as equivalent to a complex FFT;
+  phase is lost unless a richer measurement protocol is used.
+- a classical `np.linalg.inv` is never called “quantum-enhanced”;
+- the retired Qiskit Aqua HHL implementation is not used as an active backend;
+- experimental linear-system solvers must be explicitly injected and resource-accounted.
 
-### QFT Simulations:
-The QFT simulations use Qiskit's Aer simulator. Adjust your Qiskit installation if you encounter module import issues.
+## Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+pytest -q
+python -m quantumbci
+```
+
+Optional Qiskit/Aer support:
+
+```bash
+pip install -e '.[quantum]'
+```
+
+The base package intentionally depends only on NumPy.
+
+## Example: an interpretable open-system probe
+
+```python
+import numpy as np
+from quantumbci.open_system import dephasing_collapse, evolve_lindblad
+from quantumbci.states import density_from_samples, l1_coherence
+
+latents = np.random.default_rng(0).normal(size=(128, 2))
+rho0 = density_from_samples(latents)
+H = np.array([[0.0, 0.8], [0.8, 0.2]], dtype=complex)
+collapse = [dephasing_collapse(2, 0, 0.5), dephasing_collapse(2, 1, 0.5)]
+trajectory = evolve_lindblad(rho0, H, np.linspace(0, 1, 101), collapse_operators=collapse)
+print(l1_coherence(trajectory[0]), l1_coherence(trajectory[-1]))
+```
+
+This demonstrates the *model mechanism*. It does not assert that the latent state is a microscopic
+quantum state.
+
+## Foundation-model integration
+
+`quantumbci.foundation.density_states_from_embeddings` accepts `(batch, tokens, features)` arrays,
+so the same quantum-inspired probe can sit on frozen LaBraM, EEGPT, BrainWave, NeuroLM, specialist,
+or random-control embeddings without coupling the core library to a particular deep-learning stack.
+
+The recommended experiment is paired: **same subjects, same splits, same frozen embeddings, same
+readout, different representation layer.** Then run off-diagonal ablations and bootstrap the
+mechanism observables.
+
+## Validation philosophy
+
+A result is interesting only if it survives three ledgers:
+
+- **Mathematical:** Hermiticity/PSD/trace, normalization, numerical stability, circuit semantics.
+- **Predictive:** held-out subjects/sessions, calibration, transfer, data efficiency, compute.
+- **Mechanistic:** parameter recovery, intervention prediction, identifiability, stability, matched
+  classical alternatives, explicit falsifiers.
+
+The test suite already enforces the first layer for the core primitives. The next release should
+build the benchmark/manifest harness for the latter two.
+
+## Reading context
+
+- Quantum cognition is a well-developed use of quantum probability **without requiring quantum
+  brain physics**: Pothos & Busemeyer (2022), https://pubmed.ncbi.nlm.nih.gov/34546804/
+- A 2025 overview makes the same quantum-probability-versus-physics distinction:
+  https://pubmed.ncbi.nlm.nih.gov/40608277/
+- Recent work explicitly explores bridges from oscillatory neural networks to quantum-like states:
+  https://pubmed.ncbi.nlm.nih.gov/40889614/ and https://pubmed.ncbi.nlm.nih.gov/41446506/
+- LaBraM (ICLR 2024): https://openreview.net/forum?id=QzTpTRVtrP
+- EEGPT (NeurIPS 2024): https://github.com/BINE022/EEGPT
+- 2026 EEG foundation-model benchmark: https://arxiv.org/abs/2601.17883
+- Qiskit removed its old linear-solver/HHL module; historical documentation also emphasizes that
+  full solution readout and oracle assumptions matter to the speedup claim:
+  https://quantum.cloud.ibm.com/docs/en/api/qiskit/release-notes/0.43
+
+## Roadmap
+
+- **v0.2:** scientific claim ledger + mechanism kernel + CI/tests (this upgrade)
+- **v0.3:** MNE/BIDS benchmark harness, strict subject/session splits, experiment manifests
+- **v0.4:** frozen LaBraM + EEGPT adapters and matched density-geometry experiments
+- **v0.5:** identifiable Lindblad-vs-LDS latent dynamics benchmark
+- **v0.6:** preregistered contextual/order-effect experiment with classical adversaries
+- **v0.7:** quantum-hardware/resource sandbox for only the hypotheses that survive the ladder
+
+## Legacy notebooks
+
+`test_qffy.ipynb` and the empty `test_qkalman.ipynb` are retained for provenance in v0.2. They should
+be replaced by reproducible example notebooks only after the benchmark harness exists, so notebooks
+never become the sole source of research logic again.
