@@ -23,6 +23,13 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _required_text(name: str, value: Any) -> str:
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"{name} must not be empty")
+    return text
+
+
 def _hash_representation(values: np.ndarray) -> str:
     array = np.asarray(values)
     if array.dtype.hasobject:
@@ -111,15 +118,17 @@ class LongitudinalE001CaseResult:
     representation_id: str
     representation_sha256: str
     authority: Mapping[str, Any]
+    provenance: Mapping[str, str]
     rows: tuple[LongitudinalE001Row, ...]
     study_fingerprint: str
 
     def to_mapping(self, *, include_predictions: bool = False) -> dict[str, Any]:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "representation_id": self.representation_id,
             "representation_sha256": self.representation_sha256,
             "authority": dict(self.authority),
+            "provenance": dict(self.provenance),
             "study_fingerprint": self.study_fingerprint,
             "rows": [row.to_mapping(include_predictions=include_predictions) for row in self.rows],
         }
@@ -132,6 +141,9 @@ def run_longitudinal_e001_case(
     *,
     representation_id: str,
     budgets_per_class: Sequence[int],
+    upstream_dataset_fingerprint: str,
+    quantumbci_source_sha: str,
+    neuros_source_sha: str,
     ridge: float = 1e-3,
     center_tokens: bool = True,
     covariance_regularization: float = 1e-6,
@@ -142,10 +154,20 @@ def run_longitudinal_e001_case(
     shape ``(n_samples, tokens, features)``. The function calls
     ``authority.restore(data)`` before touching those representations, so a real
     neurOS authority revalidates processed neural bytes and split identity first.
+
+    Scientific identity additionally requires the upstream/raw dataset fingerprint
+    and exact QuantumBCI/neurOS source revisions. A processed-data hash alone is not
+    a substitute for upstream dataset provenance.
     """
 
-    if not str(representation_id).strip():
-        raise ValueError("representation_id must not be empty")
+    representation_name = _required_text("representation_id", representation_id)
+    provenance = {
+        "upstream_dataset_fingerprint": _required_text(
+            "upstream_dataset_fingerprint", upstream_dataset_fingerprint
+        ),
+        "quantumbci_source_sha": _required_text("quantumbci_source_sha", quantumbci_source_sha),
+        "neuros_source_sha": _required_text("neuros_source_sha", neuros_source_sha),
+    }
     restore = getattr(authority, "restore", None)
     if not callable(restore):
         raise TypeError("authority must expose callable restore(data)")
@@ -218,7 +240,7 @@ def run_longitudinal_e001_case(
                 processed_data_sha256=identity["processed_data_sha256"],
                 held_out_values=tuple(identity["held_out_values"]),
                 case_metadata=identity["case_metadata"],
-                representation_id=str(representation_id).strip(),
+                representation_id=representation_name,
                 representation_sha256=representation_sha,
                 calibration_per_class=budget,
                 source_train_samples=int(len(source)),
@@ -229,9 +251,10 @@ def run_longitudinal_e001_case(
         )
 
     study_identity = {
-        "schema_version": 1,
+        "schema_version": 2,
         "authority": identity,
-        "representation_id": str(representation_id).strip(),
+        "provenance": provenance,
+        "representation_id": representation_name,
         "representation_sha256": representation_sha,
         "budgets_per_class": list(budgets),
         "ridge": float(ridge),
@@ -240,9 +263,10 @@ def run_longitudinal_e001_case(
     }
     fingerprint = sha256(_canonical_json(study_identity).encode("utf-8")).hexdigest()
     return LongitudinalE001CaseResult(
-        representation_id=str(representation_id).strip(),
+        representation_id=representation_name,
         representation_sha256=representation_sha,
         authority=identity,
+        provenance=provenance,
         rows=tuple(rows),
         study_fingerprint=fingerprint,
     )
@@ -299,7 +323,8 @@ def paired_participant_bootstrap(
 
     Multiple held-out sessions/cases from the same participant are first averaged
     within participant at each calibration budget. Bootstrap resampling then occurs
-    over participants, never over correlated trials/windows.
+    over participants, never over correlated trials/windows. Every budget must contain
+    the same participant set, preserving a genuinely paired calibration frontier.
     """
 
     if n_resamples < 100:
@@ -308,9 +333,26 @@ def paired_participant_bootstrap(
     if not materialized:
         raise ValueError("rows must not be empty")
     budgets = sorted({row.calibration_per_class for row in materialized})
-    summaries: list[PairedBootstrapSummary] = []
-    rng = np.random.default_rng(int(seed))
 
+    unit_sets: dict[int, set[str]] = {}
+    for budget in budgets:
+        budget_rows = [row for row in materialized if row.calibration_per_class == budget]
+        case_ids = [row.case_id for row in budget_rows]
+        if len(case_ids) != len(set(case_ids)):
+            raise ValueError(f"duplicate case rows detected at calibration budget {budget}")
+        unit_sets[budget] = {_unit_id(row, inference_key) for row in budget_rows}
+    reference_budget = budgets[0]
+    reference_units = unit_sets[reference_budget]
+    for budget in budgets[1:]:
+        if unit_sets[budget] != reference_units:
+            missing = sorted(reference_units - unit_sets[budget])
+            extra = sorted(unit_sets[budget] - reference_units)
+            raise ValueError(
+                "participant membership differs across calibration budgets; "
+                f"budget={budget} missing={missing} extra={extra}"
+            )
+
+    summaries: list[PairedBootstrapSummary] = []
     for budget in budgets:
         budget_rows = [row for row in materialized if row.calibration_per_class == budget]
         by_unit: dict[str, list[float]] = {}
@@ -327,6 +369,7 @@ def paired_participant_bootstrap(
         if len(units) < 2:
             raise ValueError("participant-level bootstrap requires at least two inference units")
         deltas = np.asarray([np.mean(by_unit[unit]) for unit in units], dtype=float)
+        rng = np.random.default_rng(np.random.SeedSequence([int(seed), int(budget)]))
         samples = rng.integers(0, len(deltas), size=(int(n_resamples), len(deltas)))
         boot = deltas[samples].mean(axis=1)
         lower, upper = np.quantile(boot, [0.025, 0.975])
