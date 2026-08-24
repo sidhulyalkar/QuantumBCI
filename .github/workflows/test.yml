@@ -44,6 +44,64 @@ jobs:
           quantumbci smoke --seed 11 --output-root /tmp/quantumbci-smoke --json
           test -f /tmp/quantumbci-smoke/*/run.json
           test -f /tmp/quantumbci-smoke/*/report.html
+      - name: Qualify installed recipe and evidence sharing surface
+        run: |
+          mkdir -p /tmp/quantumbci-recipe
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import numpy as np
+
+          root = Path('/tmp/quantumbci-recipe')
+          rng = np.random.default_rng(21)
+          t = np.linspace(0.0, 2.0 * np.pi, 32, endpoint=False)
+          windows = []
+          labels = []
+          for index in range(80):
+              label = index % 2
+              a = np.sin(t + 0.07 * index)
+              sign = 1.0 if label else -1.0
+              x = np.stack([a, sign * a, np.cos(2 * t), np.sin(3 * t)], axis=1)
+              x += rng.normal(0.0, 0.02, size=x.shape)
+              windows.append(x)
+              labels.append(label)
+          np.save(root / 'embeddings.npy', np.stack(windows))
+          np.save(root / 'labels.npy', np.asarray(labels))
+          np.save(root / 'train.npy', np.arange(60))
+          np.save(root / 'test.npy', np.arange(60, 80))
+          (root / 'recipe.json').write_text(json.dumps({
+              'schema_version': 1,
+              'id': 'ci-public-recipe',
+              'title': 'CI portable recipe',
+              'claim_class': 'quantum_inspired',
+              'evidence_tier': 'synthetic_sanity',
+              'source_dataset': 'synthetic:ci',
+              'source_model': 'synthetic-correlated-latents-v1',
+              'data': {
+                  'embeddings': 'embeddings.npy',
+                  'labels': 'labels.npy',
+                  'train_indices': 'train.npy',
+                  'test_indices': 'test.npy',
+                  'split_name': 'fixed-heldout',
+              },
+              'benchmark': {'ridge': 0.001},
+          }), encoding='utf-8')
+          (root / 'quantumbci.json').write_text(json.dumps({
+              'schema_version': 1,
+              'artifact_root': 'runs',
+              'default_seed': 0,
+              'source_sha': 'ci-workbench',
+          }), encoding='utf-8')
+          PY
+          quantumbci recipe validate /tmp/quantumbci-recipe/recipe.json --json
+          quantumbci recipe run /tmp/quantumbci-recipe/recipe.json --config /tmp/quantumbci-recipe/quantumbci.json --json > /tmp/quantumbci-recipe/run-result.json
+          RUN_ID=$(python -c "import json; print(json.load(open('/tmp/quantumbci-recipe/run-result.json'))['run_id'])")
+          quantumbci runs verify "$RUN_ID" --config /tmp/quantumbci-recipe/quantumbci.json --json
+          quantumbci runs export "$RUN_ID" --config /tmp/quantumbci-recipe/quantumbci.json --format ro-crate --output /tmp/quantumbci-recipe/crate --json
+          quantumbci runs export "$RUN_ID" --config /tmp/quantumbci-recipe/quantumbci.json --format bids --output /tmp/quantumbci-recipe/bids --bids-version 1.11.1 --source-dataset-url https://example.org/ci --json
+          test -f /tmp/quantumbci-recipe/crate/ro-crate-metadata.json
+          test -f /tmp/quantumbci-recipe/crate/ro-crate-preview.html
+          test -f /tmp/quantumbci-recipe/bids/derivatives/quantumbci/dataset_description.json
       - name: Qualify wheel contents
         run: |
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-wheel
@@ -60,9 +118,10 @@ jobs:
               'quantumbci/experiments/manifests/E002_lindblad_dynamics.json',
               'quantumbci/experiments/manifests/E003_contextual_order.json',
               'quantumbci/experiments/manifests/E004_quantum_resource_sandbox.json',
+              'quantumbci/schemas/recipe-v1.schema.json',
           }
           missing = sorted(expected - names)
-          assert not missing, f'manifests missing from wheel: {missing}'
+          assert not missing, f'public package data missing from wheel: {missing}'
           PY
 
   neuros-integration:
