@@ -8,12 +8,22 @@ from .neuros import (
     bind_neuros_evidence,
     neuros_integration_status,
 )
+from .neuros_mechint import (
+    MixWithMaximallyMixedState,
+    PermuteDensityBasis,
+    RemoveDensityOffDiagonals,
+    run_neuros_mechint_input_audit,
+)
 
 __all__ = [
     "DensityGeometryTransform",
+    "MixWithMaximallyMixedState",
     "NeurOSEvidenceBinding",
     "NeurOSFoundationEncoder",
     "NeurOSUnavailableError",
+    "PermuteDensityBasis",
+    "RemoveDensityOffDiagonals",
     "bind_neuros_evidence",
     "neuros_integration_status",
+    "run_neuros_mechint_input_audit",
 ]
