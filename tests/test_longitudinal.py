@@ -209,10 +209,36 @@ def test_participant_bootstrap_requires_same_units_at_every_budget() -> None:
         )
 
 
+def test_participant_bootstrap_rejects_duplicate_case_rows() -> None:
+    data, representations = _fixture(37)
+    row = _run(
+        data,
+        _Authority("p1", "p1-s3"),
+        representations,
+        budgets=(0,),
+    ).rows[0]
+    with pytest.raises(ValueError, match="duplicate case rows"):
+        paired_participant_bootstrap(
+            [row, row],
+            control="normalized_covariance",
+            n_resamples=100,
+        )
+
+
 def test_participant_bootstrap_fails_without_participant_metadata() -> None:
-    data, representations = _fixture(4)
-    authority = _Authority("p1", "case")
-    authority.case_metadata = {}
-    row = _run(data, authority, representations, budgets=(0,)).rows[0]
+    data1, representations1 = _fixture(4)
+    authority1 = _Authority("p1", "case-1")
+    authority1.case_metadata = {}
+    row1 = _run(data1, authority1, representations1, budgets=(0,)).rows[0]
+
+    data2, representations2 = _fixture(6)
+    authority2 = _Authority("p2", "case-2")
+    authority2.case_metadata = {}
+    row2 = _run(data2, authority2, representations2, budgets=(0,)).rows[0]
+
     with pytest.raises(ValueError, match="participant-level inference"):
-        paired_participant_bootstrap([row, row], control="covariance", n_resamples=100)
+        paired_participant_bootstrap(
+            [row1, row2],
+            control="covariance",
+            n_resamples=100,
+        )
