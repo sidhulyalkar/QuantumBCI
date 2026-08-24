@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: "Study scope: smoke uses selected subjects/final session; full uses all 18 subjects and sessions 1-5"
+        description: "Study scope: smoke=2 subjects/session 5; cohort=all 18/session 5; full-longitudinal=all 18/sessions 1-5"
         type: choice
         options:
           - smoke
-          - full
+          - cohort
+          - full-longitudinal
         default: smoke
         required: true
       subjects:
@@ -86,17 +87,31 @@ jobs:
             --neuros-source-sha "$NEUROS_SHA"
             --output "$RUNNER_TEMP/quantumbci-kumar2024"
           )
-          if [[ "$PROFILE" == "full" ]]; then
-            quantumbci-kumar2024 \
-              --subjects "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18" \
-              --all-target-sessions \
-              "${common_args[@]}"
-          else
-            quantumbci-kumar2024 \
-              --subjects "$SUBJECTS_INPUT" \
-              --held-out-sessions "$HELDOUT_INPUT" \
-              "${common_args[@]}"
-          fi
+          all_subjects="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18"
+          case "$PROFILE" in
+            full-longitudinal)
+              quantumbci-kumar2024 \
+                --subjects "$all_subjects" \
+                --all-target-sessions \
+                "${common_args[@]}"
+              ;;
+            cohort)
+              quantumbci-kumar2024 \
+                --subjects "$all_subjects" \
+                --held-out-sessions "5" \
+                "${common_args[@]}"
+              ;;
+            smoke)
+              quantumbci-kumar2024 \
+                --subjects "$SUBJECTS_INPUT" \
+                --held-out-sessions "$HELDOUT_INPUT" \
+                "${common_args[@]}"
+              ;;
+            *)
+              echo "Unsupported profile: $PROFILE" >&2
+              exit 2
+              ;;
+          esac
       - name: Verify closed-world bundle and create RO-Crate
         shell: bash
         run: |
