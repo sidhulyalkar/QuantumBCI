@@ -1,0 +1,129 @@
+name: E001 Kumar2024 real study
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Study scope: smoke uses selected subjects/final session; full uses all 18 subjects and sessions 1-5"
+        type: choice
+        options:
+          - smoke
+          - full
+        default: smoke
+        required: true
+      subjects:
+        description: "Smoke profile subjects, comma-separated"
+        type: string
+        default: "1,10"
+        required: true
+      held_out_sessions:
+        description: "Smoke profile target sessions, comma-separated"
+        type: string
+        default: "5"
+        required: true
+      budgets:
+        description: "Balanced calibration examples per class"
+        type: string
+        default: "0,1,2,5,10"
+        required: true
+      split_seed:
+        description: "Base split seed; 2026 matches the neurOS ladder protocol"
+        type: string
+        default: "2026"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantumbci-e001-kumar2024-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NEUROS_SHA: ffa28ed552dc75158b673fdcd70729b1c9c69b47
+
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout QuantumBCI
+        uses: actions/checkout@v4
+      - name: Checkout exact merged neurOS authority
+        uses: actions/checkout@v4
+        with:
+          repository: sidhulyalkar/neurOS-v1
+          ref: ${{ env.NEUROS_SHA }}
+          path: _deps/neuros-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - name: Install real EEG evidence stack
+        run: |
+          python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-models
+          python -m pip install -e '_deps/neuros-v1/packages/neuros-foundation[evidence]'
+          python -m pip install -e .
+      - name: Resolve preregistered study scope
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.profile }}" == "full" ]]; then
+            echo "subjects=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18" >> "$GITHUB_OUTPUT"
+            echo "target_args=--all-target-sessions" >> "$GITHUB_OUTPUT"
+          else
+            echo "subjects=${{ inputs.subjects }}" >> "$GITHUB_OUTPUT"
+            echo "target_args=--held-out-sessions ${{ inputs.held_out_sessions }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run equivalence-first Kumar2024 E001 study
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/evidence/run_kumar2024_e001.py \
+            --subjects "${{ steps.scope.outputs.subjects }}" \
+            ${{ steps.scope.outputs.target_args }} \
+            --budgets "${{ inputs.budgets }}" \
+            --split-seed "${{ inputs.split_seed }}" \
+            --evaluation-fraction 0.5 \
+            --fmin 8 \
+            --fmax 30 \
+            --quantumbci-source-sha "$GITHUB_SHA" \
+            --neuros-source-sha "$NEUROS_SHA" \
+            --output "$RUNNER_TEMP/quantumbci-kumar2024"
+      - name: Verify closed-world bundle and create RO-Crate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from quantumbci.exporting import export_run_ro_crate, verify_run_artifacts
+
+          root = Path("${{ runner.temp }}")
+          study = root / "quantumbci-kumar2024"
+          verification = verify_run_artifacts(study)
+          assert verification["valid"], verification
+          archive = export_run_ro_crate(
+              study,
+              root / "quantumbci-kumar2024-ro-crate",
+              archive=True,
+          )
+          assert archive.is_file(), archive
+          print(verification)
+          print(archive)
+          PY
+      - name: Publish human report to workflow summary
+        shell: bash
+        run: |
+          cat "$RUNNER_TEMP/quantumbci-kumar2024/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload evidence bundle and research object
+        uses: actions/upload-artifact@v4
+        with:
+          name: E001-Kumar2024-${{ inputs.profile }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/quantumbci-kumar2024/
+            ${{ runner.temp }}/quantumbci-kumar2024-ro-crate.zip
