@@ -38,6 +38,7 @@ jobs:
       - name: Qualify installed console surface
         run: |
           quantumbci --version
+          quantumbci-audit --help
           quantumbci doctor --json
           quantumbci experiments list --json
           quantumbci experiments validate experiments/manifests/E001_density_geometry.json --json
@@ -102,6 +103,31 @@ jobs:
           test -f /tmp/quantumbci-recipe/crate/ro-crate-metadata.json
           test -f /tmp/quantumbci-recipe/crate/ro-crate-preview.html
           test -f /tmp/quantumbci-recipe/bids/derivatives/quantumbci/dataset_description.json
+      - name: Qualify installed equivalence-first E001 surface
+        run: |
+          quantumbci-audit density /tmp/quantumbci-recipe/embeddings.npy --json > /tmp/quantumbci-recipe/density-audit.json
+          quantumbci-audit e001 /tmp/quantumbci-recipe/embeddings.npy /tmp/quantumbci-recipe/labels.npy \
+            --train-indices /tmp/quantumbci-recipe/train.npy \
+            --test-indices /tmp/quantumbci-recipe/test.npy \
+            --output /tmp/quantumbci-recipe/e001-audit.json \
+            --json > /tmp/quantumbci-recipe/e001-stdout.json
+          python -m quantumbci.experiments.tasks equivalence-audit E001 density-covariance \
+            --output /tmp/quantumbci-recipe/equivalence_audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('/tmp/quantumbci-recipe')
+          density = json.loads((root / 'density-audit.json').read_text())
+          e001 = json.loads((root / 'e001-audit.json').read_text())
+          gate = json.loads((root / 'equivalence_audit.json').read_text())
+          assert density['equivalent_within_tolerance'] is True
+          assert density['novel_information'] is False
+          assert e001['density_information_novel'] is False
+          assert e001['equivalence_audit']['equivalent_within_tolerance'] is True
+          assert gate['status'] == 'pass'
+          assert gate['representation_information_novel'] is False
+          PY
       - name: Qualify wheel contents
         run: |
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-wheel
@@ -119,9 +145,12 @@ jobs:
               'quantumbci/experiments/manifests/E003_contextual_order.json',
               'quantumbci/experiments/manifests/E004_quantum_resource_sandbox.json',
               'quantumbci/schemas/recipe-v1.schema.json',
+              'quantumbci/audit_cli.py',
+              'quantumbci/equivalence.py',
+              'quantumbci/longitudinal.py',
           }
           missing = sorted(expected - names)
-          assert not missing, f'public package data missing from wheel: {missing}'
+          assert not missing, f'public package data/modules missing from wheel: {missing}'
           PY
 
   neuros-integration:
