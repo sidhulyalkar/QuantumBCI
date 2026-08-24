@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from quantumbci.exporting import verify_run_artifacts
+from quantumbci.exporting import export_run_ro_crate, verify_run_artifacts
 from quantumbci.studies import kumar2024 as study
 
 
@@ -174,3 +174,8 @@ def test_two_participant_kumar_bundle_is_closed_world_and_export_ready(tmp_path:
     assert {row["subject"] for row in rows} == {"1", "10"}
     assert {row["original_protocol"] for row in rows} == {"GR", "PAR"}
     assert "normalized_covariance" in {row["method"] for row in rows}
+
+    crate = export_run_ro_crate(output, tmp_path / "crate")
+    assert crate.joinpath("ro-crate-metadata.json").is_file()
+    assert crate.joinpath("data", "evidence_ledger.json").is_file()
+    assert crate.joinpath("data", "dataset_fingerprint.json").is_file()
