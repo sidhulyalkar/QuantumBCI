@@ -23,8 +23,11 @@ from .dynamics_equivalence import (
     evolve_affine_bloch,
 )
 from .e002_synthetic import (
+    CANONICAL_STRUCTURE_RESIDUAL_MAX,
+    CLASSICAL_ADVERSARY_RESIDUAL_MIN,
     CanonicalQubitParameters,
     canonical_qubit_model,
+    canonical_structure_residual,
     fit_affine_generator_from_trajectories,
     recover_canonical_parameters,
     run_e002_synthetic_recovery_grid,
@@ -60,6 +63,8 @@ __all__ = [
     "BatchEquivalenceAudit",
     "BenchmarkMetrics",
     "BlochAffineGenerator",
+    "CANONICAL_STRUCTURE_RESIDUAL_MAX",
+    "CLASSICAL_ADVERSARY_RESIDUAL_MIN",
     "CanonicalQubitParameters",
     "ClaimClass",
     "DensityBenchmarkResult",
@@ -85,6 +90,7 @@ __all__ = [
     "benchmark_e001_embeddings",
     "bloch_to_density",
     "canonical_qubit_model",
+    "canonical_structure_residual",
     "classical_fft",
     "commutator_norm",
     "compile_qubit_lindblad_to_affine",
