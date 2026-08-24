@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -9,14 +10,25 @@ import numpy as np
 
 from ..e001_longitudinal_prepared import run_prepared_longitudinal_e001_case
 from ..e001_prepared import prepare_e001_static_features
+from ..exporting import verify_run_artifacts
 from ..longitudinal import LongitudinalE001CaseResult
 from .kumar2024 import (
     Kumar2024StudyConfig,
+    _json_dump,
     _neuros_authority_api,
+    _sha256_file,
     _stable_seed,
     _write_study_bundle,
     fingerprint_raw_dataset,
 )
+
+
+_ADAPTATION_CONTRACT = {
+    "static_feature_scope": "prepared_once_per_participant_tensor",
+    "pca_fit_scope": "source_history_only",
+    "target_calibration_changes": "readout_only",
+    "final_evaluation_in_representation_fit": False,
+}
 
 
 def run_kumar2024_subject(
@@ -129,6 +141,62 @@ def run_kumar2024_subject(
     return tuple(authorities), tuple(cases)
 
 
+def _finalize_prepared_bundle(output: Path) -> dict[str, Any]:
+    """Make the prepared-feature adaptation contract explicit and re-close the ledger."""
+
+    manifest_path = output / "study_manifest.json"
+    ledger_path = output / "evidence_ledger.json"
+    representation_path = output / "representation_index.json"
+    run_path = output / "run.json"
+    report_path = output / "report.md"
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["representation_adaptation"] = dict(_ADAPTATION_CONTRACT)
+    boundary = list(manifest.get("claim_boundary", []))
+    rule = (
+        "PCA is fit once on chronological source history and remains frozen across target "
+        "calibration budgets; target calibration changes readouts only"
+    )
+    if rule not in boundary:
+        boundary.append(rule)
+    manifest["claim_boundary"] = boundary
+    _json_dump(manifest_path, manifest)
+
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["representation_adaptation"] = dict(_ADAPTATION_CONTRACT)
+    _json_dump(ledger_path, ledger)
+
+    representation = json.loads(representation_path.read_text(encoding="utf-8"))
+    representation["control_preparation"] = dict(_ADAPTATION_CONTRACT)
+    _json_dump(representation_path, representation)
+
+    run = json.loads(run_path.read_text(encoding="utf-8"))
+    run["representation_adaptation"] = dict(_ADAPTATION_CONTRACT)
+    _json_dump(run_path, run)
+
+    report = report_path.read_text(encoding="utf-8").rstrip()
+    report += (
+        "\n\n## Representation adaptation contract\n\n"
+        "Budget-independent density/covariance/operator features are prepared once from the "
+        "participant tensor. The flattened PCA control is fit once using chronological source "
+        "history only. Target-session calibration examples may update the matched readout, but "
+        "they do not refit PCA or any other representation transform. Final evaluation examples "
+        "never enter representation fitting.\n"
+    )
+    report_path.write_text(report, encoding="utf-8")
+
+    hashes = {
+        path.name: _sha256_file(path)
+        for path in output.iterdir()
+        if path.is_file() and path.name != "artifact_hashes.json"
+    }
+    _json_dump(output / "artifact_hashes.json", hashes)
+    verification = verify_run_artifacts(output)
+    if not verification["valid"]:
+        raise RuntimeError(f"prepared study artifact verification failed: {verification}")
+    return verification
+
+
 def run_kumar2024_study(
     output: str | Path,
     *,
@@ -181,8 +249,9 @@ def run_kumar2024_study(
         authorities.extend(subject_authorities)
         cases.extend(subject_cases)
 
-    return _write_study_bundle(
-        Path(output).resolve(),
+    resolved = Path(output).resolve()
+    result = _write_study_bundle(
+        resolved,
         config=config,
         dataset_spec=dataset_spec,
         raw_fingerprint=raw_fingerprint,
@@ -192,3 +261,7 @@ def run_kumar2024_study(
         neuros_source_sha=neuros_source_sha,
         overwrite=overwrite,
     )
+    verification = _finalize_prepared_bundle(resolved)
+    result["artifact_verification"] = verification
+    result["representation_adaptation"] = dict(_ADAPTATION_CONTRACT)
+    return result
