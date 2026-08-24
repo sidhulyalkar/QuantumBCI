@@ -8,6 +8,7 @@ from quantumbci.longitudinal import evaluate_density_information_gate, run_longi
 
 
 fm = pytest.importorskip("neuros.foundation_models")
+NEUROS_SHA = "ffa28ed552dc75158b673fdcd70729b1c9c69b47"
 
 
 def _longitudinal_fixture():
@@ -65,7 +66,7 @@ def test_real_neuros_longitudinal_authority_binds_into_run_identity() -> None:
         dataset_fingerprint="upstream-raw-sha256-smoke",
         partition=partition,
         calibration_split=calibration,
-        neuros_source_sha="ffa28ed552dc75158b673fdcd70729b1c9c69b47",
+        neuros_source_sha=NEUROS_SHA,
     )
 
     assert binding.partition_fingerprint == partition.fingerprint
@@ -112,11 +113,17 @@ def test_quantumbci_consumes_real_longitudinal_case_authority() -> None:
         representations,
         representation_id="raw-time-by-channel-v1",
         budgets_per_class=(0, 1, 2),
+        upstream_dataset_fingerprint="synthetic-real-neuros-contract-fixture",
+        quantumbci_source_sha="quantumbci-ci-head",
+        neuros_source_sha=NEUROS_SHA,
     )
 
     assert result.authority["authority_fingerprint"] == authority.authority_fingerprint
     assert result.authority["processed_data_sha256"] == authority.processed_data_sha256
+    assert result.provenance["neuros_source_sha"] == NEUROS_SHA
+    assert result.provenance["quantumbci_source_sha"] == "quantumbci-ci-head"
     assert len(result.representation_sha256) == 64
+    assert len(result.study_fingerprint) == 64
     assert {row.evaluation_samples for row in result.rows} == {
         len(calibration.evaluation_indices)
     }
