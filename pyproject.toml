@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantum-bci"
-version = "0.2.0"
+version = "0.3.0"
 description = "A falsifiable research workbench for quantum, quantum-inspired, and classical models of neural signals."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,6 +22,16 @@ quantum = [
   "qiskit>=1.2",
   "qiskit-aer>=0.15",
 ]
+neuros = [
+  "neuros-core>=2.0.0",
+  "neuros-foundation>=2.1.0",
+]
+neuros-mechint = [
+  "neuros-mechint>=1.0.0",
+]
+
+[project.entry-points."neuros.transforms"]
+quantumbci-density = "quantumbci.integrations.neuros:DensityGeometryTransform"
 
 [tool.setuptools.packages.find]
 include = ["quantumbci*"]

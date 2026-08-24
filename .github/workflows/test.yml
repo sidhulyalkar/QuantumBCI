@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: quantumbci-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -20,3 +24,31 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
       - run: pytest -q
+
+  neuros-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout QuantumBCI
+        uses: actions/checkout@v4
+      - name: Checkout pinned neurOS compatibility source
+        uses: actions/checkout@v4
+        with:
+          repository: sidhulyalkar/neurOS-v1
+          ref: 2e1a3c2d57fbba6b8b318d26639abb52bff930a5
+          path: _deps/neuros-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - name: Install pinned neurOS public contracts
+        run: |
+          python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-models
+          python -m pip install -e _deps/neuros-v1/packages/neuros-foundation
+      - run: python -m pip install -e '.[dev]'
+      - name: Qualify real neurOS bridge
+        run: >-
+          python -m pytest -q
+          tests/test_neuros_integration.py
+          tests/test_neuros_real_contracts.py

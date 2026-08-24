@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "E004_quantum_resource_sandbox",
+  "title": "Observable-level quantum algorithm resource sandbox",
+  "claim_class": "quantum_algorithm",
+  "objective": "Determine whether a specific observable promoted from earlier experiments can be mapped to a quantum computation with honest end-to-end resource accounting.",
+  "datasets": ["promoted_artifact_from_E001_or_E002"],
+  "encoders": ["compressed_promoted_representation_only"],
+  "primary_metrics": ["observable_error", "circuit_width", "two_qubit_gate_count", "circuit_depth", "shots", "end_to_end_wall_time", "classical_baseline_time"],
+  "stages": [
+    {"id":"promotion_contract","kind":"gate","depends_on":[],"command":["python","-m","quantumbci.experiments.tasks","promotion-contract","E004"],"resources":{"cpu":1},"produces":["promotion_contract.json"]},
+    {"id":"classical_exact","kind":"model","depends_on":["promotion_contract"],"command":["python","-m","quantumbci.experiments.tasks","classical-observable","E004"],"resources":{"cpu":8},"produces":["classical_reference.json"]},
+    {"id":"map_quantum_problem","kind":"quantum","depends_on":["promotion_contract"],"command":["python","-m","quantumbci.experiments.tasks","map-quantum","E004"],"resources":{"cpu":4},"produces":["circuit_spec.json","state_preparation_cost.json"]},
+    {"id":"ideal_simulation","kind":"quantum","depends_on":["map_quantum_problem","classical_exact"],"command":["python","-m","quantumbci.experiments.tasks","simulate-ideal","E004"],"resources":{"cpu":16},"produces":["ideal_metrics.json"]},
+    {"id":"noisy_simulation","kind":"quantum","depends_on":["ideal_simulation"],"command":["python","-m","quantumbci.experiments.tasks","simulate-noisy","E004"],"resources":{"gpu":1},"produces":["noisy_metrics.json","resource_estimate.json"]},
+    {"id":"hardware_feasibility_gate","kind":"gate","depends_on":["noisy_simulation"],"command":["python","-m","quantumbci.experiments.tasks","gate","E004","hardware"],"resources":{"cpu":1},"produces":["hardware_gate.json"]},
+    {"id":"qpu_execution","kind":"quantum","depends_on":["hardware_feasibility_gate"],"command":["python","-m","quantumbci.experiments.tasks","run-qpu","E004"],"resources":{"qpu":1},"produces":["qpu_metrics.json","backend_snapshot.json"]},
+    {"id":"resource_report","kind":"report","depends_on":["qpu_execution"],"command":["python","-m","quantumbci.experiments.tasks","report","E004"],"resources":{"cpu":1},"produces":["resource_ledger.json","report.md"]}
+  ],
+  "decision_gates": [
+    "E004 may start only from an observable with demonstrated value in E001/E002; no quantum circuit is built merely because a mapping exists.",
+    "QFT/QLSA candidates must account for state preparation, condition number/sparsity assumptions, sampling, readout, error mitigation, and classical pre/post-processing.",
+    "QLSA is rejected when the desired output is a full classical solution vector rather than a small set of observables.",
+    "QPU execution is blocked until ideal and noisy simulation pass an explicit backend-specific feasibility gate using a current calibration snapshot.",
+    "No computational-advantage language is allowed unless the complete end-to-end pipeline beats the strongest classical method under comparable error tolerance and accounting."
+  ]
+}

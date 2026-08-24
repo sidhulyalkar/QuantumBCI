@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "E002_lindblad_dynamics",
+  "title": "Identifiable Lindblad-style latent neural dynamics",
+  "claim_class": "quantum_inspired",
+  "objective": "Test whether low-dimensional open-system dynamics provide more identifiable and intervention-predictive latent trajectories than classical dynamical controls.",
+  "datasets": ["synthetic_parameter_recovery", "EEGMMIDB_continuous", "Sleep-EDF_transition_sequences"],
+  "encoders": ["best_E001_encoder_or_raw_low_dimensional_features"],
+  "primary_metrics": ["heldout_nll", "multi_step_forecast_error", "trace_distance", "parameter_recovery_error", "bootstrap_parameter_icc"],
+  "stages": [
+    {"id":"synthetic_grid","kind":"simulation","depends_on":[],"command":["python","-m","quantumbci.experiments.tasks","synthetic-recovery","E002"],"resources":{"cpu":16},"produces":["synthetic_recovery.json"]},
+    {"id":"identifiability_gate","kind":"gate","depends_on":["synthetic_grid"],"command":["python","-m","quantumbci.experiments.tasks","gate","E002","identifiability"],"resources":{"cpu":1},"produces":["identifiability_gate.json"]},
+    {"id":"trajectory_contract","kind":"data","depends_on":["identifiability_gate"],"command":["python","-m","quantumbci.experiments.tasks","trajectory-contract","E002"],"resources":{"cpu":4},"produces":["trajectory_index.json"]},
+    {"id":"fit_open_system","kind":"mechanism","depends_on":["trajectory_contract"],"command":["python","-m","quantumbci.experiments.tasks","fit-lindblad","E002"],"resources":{"cpu":16},"produces":["lindblad_fits.json","mechanism_observables.json"]},
+    {"id":"fit_classical_controls","kind":"model","depends_on":["trajectory_contract"],"command":["python","-m","quantumbci.experiments.tasks","fit-dynamics-controls","E002"],"resources":{"cpu":16},"produces":["classical_fits.json"]},
+    {"id":"interventions","kind":"interpretability","depends_on":["fit_open_system","fit_classical_controls"],"command":["python","-m","quantumbci.experiments.tasks","dynamics-interventions","E002"],"resources":{"cpu":8},"produces":["intervention_metrics.json"]},
+    {"id":"bootstrap","kind":"statistics","depends_on":["interventions"],"command":["python","-m","quantumbci.experiments.tasks","bootstrap","E002"],"resources":{"cpu":16},"produces":["bootstrap_metrics.json"]},
+    {"id":"report","kind":"report","depends_on":["bootstrap"],"command":["python","-m","quantumbci.experiments.tasks","report","E002"],"resources":{"cpu":1},"produces":["evidence_ledger.json","report.md"]}
+  ],
+  "decision_gates": [
+    "Synthetic promotion requires median normalized recovery error <=0.20 for identifiable Hamiltonian/collapse parameters at the preregistered moderate-SNR tier and no systematic sign inversion.",
+    "Real-data comparisons must include LDS/Kalman, VAR/damped-oscillator, switching-state, and a flexible nonlinear control when sample size permits.",
+    "A mechanistic claim requires held-out predictive improvement plus bootstrap parameter stability (target ICC >=0.60) and intervention-direction consistency.",
+    "If a classical state-space model matches predictive performance and produces more stable parameters, the Lindblad parameterization is not promoted.",
+    "No fitted latent collapse/dephasing parameter may be interpreted as microscopic biological decoherence without an independent physical measurement."
+  ]
+}
