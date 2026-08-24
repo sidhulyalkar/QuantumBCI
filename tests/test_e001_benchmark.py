@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from quantumbci.benchmarking import IndexSplit, benchmark_e001_embeddings
 
@@ -62,3 +63,33 @@ def test_e001_control_suite_is_train_split_safe() -> None:
     assert set(result.metrics) == expected
     assert set(result.predictions) == expected
     assert result.feature_dimensions["pca_flattened"] <= len(split.train_indices) - 1
+
+
+def test_index_split_rejects_duplicate_sample_weighting() -> None:
+    with pytest.raises(ValueError, match="train_indices contain duplicate"):
+        IndexSplit(np.asarray([0, 1, 1, 2]), np.asarray([3, 4]))
+    with pytest.raises(ValueError, match="test_indices contain duplicate"):
+        IndexSplit(np.asarray([0, 1, 2]), np.asarray([3, 4, 4]))
+
+
+def test_e001_rejects_evaluation_class_absent_from_training() -> None:
+    embeddings, labels = _correlation_fixture(seed=23)
+    labels = labels.copy()
+    labels[72:] = 2
+    split = IndexSplit(np.arange(72), np.arange(72, 96))
+    with pytest.raises(ValueError, match="classes absent from training authority"):
+        benchmark_e001_embeddings(embeddings, labels, split)
+
+
+def test_e001_rejects_invalid_regularization() -> None:
+    embeddings, labels = _correlation_fixture(seed=29)
+    split = IndexSplit(np.arange(72), np.arange(72, 96))
+    with pytest.raises(ValueError, match="ridge must be finite and non-negative"):
+        benchmark_e001_embeddings(embeddings, labels, split, ridge=-1.0)
+    with pytest.raises(ValueError, match="covariance regularization"):
+        benchmark_e001_embeddings(
+            embeddings,
+            labels,
+            split,
+            covariance_regularization=0.0,
+        )
