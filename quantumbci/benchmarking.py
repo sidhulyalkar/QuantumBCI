@@ -26,6 +26,10 @@ class IndexSplit:
             raise ValueError("train_indices and test_indices must both be non-empty")
         if np.any(train < 0) or np.any(test < 0):
             raise ValueError("split indices must be non-negative")
+        if len(np.unique(train)) != len(train):
+            raise ValueError("train_indices contain duplicate samples")
+        if len(np.unique(test)) != len(test):
+            raise ValueError("test_indices contain duplicate samples")
         if np.intersect1d(train, test).size:
             raise ValueError("train/test split overlap detected")
         object.__setattr__(self, "train_indices", train)
@@ -124,6 +128,8 @@ def _fit_readout(x: np.ndarray, y: np.ndarray, *, ridge: float) -> _LinearReadou
     labels = np.asarray(y).reshape(-1)
     if values.ndim != 2 or len(values) != len(labels):
         raise ValueError("readout requires 2D features aligned with labels")
+    if not np.isfinite(ridge) or ridge < 0:
+        raise ValueError("ridge must be finite and non-negative")
     classes = np.unique(labels)
     if len(classes) < 2:
         raise ValueError("readout requires at least two classes")
@@ -137,6 +143,16 @@ def _fit_readout(x: np.ndarray, y: np.ndarray, *, ridge: float) -> _LinearReadou
     penalty[-1, -1] = 0.0
     weights = np.linalg.solve(design.T @ design + penalty, design.T @ target)
     return _LinearReadout(mean=mean, scale=scale, weights=weights, classes=classes)
+
+
+def _validate_class_support(y_train: np.ndarray, y_test: np.ndarray) -> None:
+    train_classes = set(np.asarray(y_train).astype(str).tolist())
+    test_classes = set(np.asarray(y_test).astype(str).tolist())
+    missing = sorted(test_classes - train_classes)
+    if missing:
+        raise ValueError(
+            "evaluation contains classes absent from training authority: " + ", ".join(missing)
+        )
 
 
 def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> BenchmarkMetrics:
@@ -235,6 +251,7 @@ def benchmark_density_embeddings(
     test = split.test_indices
     y_train = target[train]
     y_test = target[test]
+    _validate_class_support(y_train, y_test)
 
     density_model = _fit_readout(density_features[train], y_train, ridge=ridge)
     diagonal_model = _fit_readout(diagonal_features[train], y_train, ridge=ridge)
@@ -283,8 +300,8 @@ def _log_covariance_features(
     *,
     regularization: float,
 ) -> np.ndarray:
-    if regularization <= 0:
-        raise ValueError("covariance regularization must be positive")
+    if not np.isfinite(regularization) or regularization <= 0:
+        raise ValueError("covariance regularization must be finite and positive")
     rows = []
     for matrix in matrices:
         cov = np.asarray(matrix, dtype=float)
@@ -395,6 +412,7 @@ def benchmark_e001_embeddings(
     test = split.test_indices
     y_train = target[train]
     y_test = target[test]
+    _validate_class_support(y_train, y_test)
 
     states = np.stack([density_from_samples(x, center=center_tokens) for x in values])
     density_features = np.stack([vectorize_density(rho) for rho in states])
@@ -464,8 +482,6 @@ def benchmark_e001_embeddings(
         key=lambda name: (metrics[name].balanced_accuracy, name),
     )
     audit = audit_embedding_batch(values, center_tokens=center_tokens).to_mapping()
-    # This is a hard invariant of the current constructor. If numerical drift ever
-    # breaks it, the benchmark should fail instead of changing the scientific story.
     if not audit["equivalent_within_tolerance"]:
         raise RuntimeError("density/normalized-covariance equivalence invariant failed")
     if not np.array_equal(predictions["density"], predictions["normalized_covariance"]):
