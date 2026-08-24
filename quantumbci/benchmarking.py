@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
+from .equivalence import audit_embedding_batch, trace_normalized_second_moment
 from .states import density_from_samples
 
 
@@ -177,21 +178,16 @@ def remove_density_offdiagonals(rho: np.ndarray) -> np.ndarray:
     return np.diag(np.diag(state))
 
 
-def benchmark_density_embeddings(
+def _validate_embedding_benchmark(
     embeddings: np.ndarray,
     labels: np.ndarray,
     split: IndexSplit,
-    *,
-    ridge: float = 1e-3,
-    center_tokens: bool = True,
-) -> DensityBenchmarkResult:
-    """Compare density geometry to matched lightweight controls.
-
-    ``embeddings`` must have shape ``(examples, tokens, features)``. The function
-    never creates a random split on the caller's behalf: promoted studies should
-    bind ``split`` to neurOS or another immutable evidence authority.
-    """
-
+) -> tuple[np.ndarray, np.ndarray]:
+    if np.iscomplexobj(embeddings):
+        raise ValueError(
+            "the current matched neural benchmark expects real-valued embeddings; "
+            "complex representations require explicit complex-valued classical controls"
+        )
     values = np.asarray(embeddings, dtype=float)
     target = np.asarray(labels).reshape(-1)
     if values.ndim != 3:
@@ -203,7 +199,25 @@ def benchmark_density_embeddings(
     if not np.all(np.isfinite(values)):
         raise ValueError("embeddings contain non-finite values")
     split.validate_length(len(values))
+    return values, target
 
+
+def benchmark_density_embeddings(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    split: IndexSplit,
+    *,
+    ridge: float = 1e-3,
+    center_tokens: bool = True,
+) -> DensityBenchmarkResult:
+    """Compare density geometry to matched lightweight controls.
+
+    This compatibility API is retained for v0.4/v0.5 recipes. For promotion-oriented
+    E001 work use :func:`benchmark_e001_embeddings`, which includes the exact
+    normalized-covariance equivalence control plus a stronger classical control suite.
+    """
+
+    values, target = _validate_embedding_benchmark(embeddings, labels, split)
     states = np.stack(
         [density_from_samples(example, center=center_tokens) for example in values]
     )
@@ -229,8 +243,6 @@ def benchmark_density_embeddings(
     pred_density = density_model.predict(density_features[test])
     pred_diagonal = diagonal_model.predict(diagonal_features[test])
     pred_pooled = pooled_model.predict(pooled_features[test])
-    # Intervention semantics: erase the proposed density mechanism but keep the
-    # original fitted density readout fixed.
     pred_ablated = density_model.predict(ablated_features[test])
 
     return DensityBenchmarkResult(
@@ -247,4 +259,228 @@ def benchmark_density_embeddings(
             "offdiagonal_ablation": pred_ablated,
         },
         test_labels=y_test,
+    )
+
+
+def _symmetric_real_vector(matrix: np.ndarray) -> np.ndarray:
+    value = np.asarray(matrix, dtype=float)
+    if value.ndim != 2 or value.shape[0] != value.shape[1]:
+        raise ValueError("matrix must be square")
+    upper = np.triu_indices(value.shape[0], k=1)
+    return np.concatenate([np.diag(value), np.sqrt(2.0) * value[upper]])
+
+
+def _covariance_matrix(example: np.ndarray, *, center: bool) -> np.ndarray:
+    x = np.asarray(example, dtype=float)
+    if center:
+        x = x - x.mean(axis=0, keepdims=True)
+    denom = max(1, x.shape[0] - 1 if center else x.shape[0])
+    return (x.T @ x) / float(denom)
+
+
+def _log_covariance_features(
+    matrices: np.ndarray,
+    *,
+    regularization: float,
+) -> np.ndarray:
+    if regularization <= 0:
+        raise ValueError("covariance regularization must be positive")
+    rows = []
+    for matrix in matrices:
+        cov = np.asarray(matrix, dtype=float)
+        dimension = cov.shape[0]
+        scale = float(np.trace(cov)) / max(1, dimension)
+        ridge = regularization * max(scale, 1e-12)
+        values, vectors = np.linalg.eigh((cov + cov.T) / 2 + ridge * np.eye(dimension))
+        values = np.clip(values, 1e-15, None)
+        logm = (vectors * np.log(values)) @ vectors.T
+        rows.append(_symmetric_real_vector(logm))
+    return np.stack(rows)
+
+
+def _train_only_pca_features(
+    values: np.ndarray,
+    train_indices: np.ndarray,
+    *,
+    max_components: int,
+) -> tuple[np.ndarray, int]:
+    flat = np.asarray(values, dtype=float).reshape(len(values), -1)
+    train = flat[train_indices]
+    mean = train.mean(axis=0)
+    centered = train - mean
+    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    rank_limit = min(len(train) - 1, flat.shape[1], int(max_components), len(vh))
+    if rank_limit < 1:
+        raise ValueError("PCA control requires at least two training examples")
+    components = vh[:rank_limit]
+    return (flat - mean) @ components.T, int(rank_limit)
+
+
+@dataclass(frozen=True)
+class E001RepresentationBenchmarkResult:
+    """Adversarial representation benchmark for E001 promotion decisions."""
+
+    classes: tuple[str, ...]
+    split_name: str
+    metrics: Mapping[str, BenchmarkMetrics]
+    feature_dimensions: Mapping[str, int]
+    predictions: Mapping[str, np.ndarray]
+    test_labels: np.ndarray
+    equivalence_audit: Mapping[str, Any]
+    strongest_classical_control: str
+
+    @property
+    def density_minus_strongest_control(self) -> float:
+        return (
+            self.metrics["density"].balanced_accuracy
+            - self.metrics[self.strongest_classical_control].balanced_accuracy
+        )
+
+    @property
+    def density_minus_ablation(self) -> float:
+        return (
+            self.metrics["density"].balanced_accuracy
+            - self.metrics["offdiagonal_ablation"].balanced_accuracy
+        )
+
+    @property
+    def density_information_novel(self) -> bool:
+        return bool(self.equivalence_audit.get("novel_information", False))
+
+    def to_mapping(self, *, include_predictions: bool = False) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "claim_class": "quantum_inspired",
+            "split_name": self.split_name,
+            "classes": list(self.classes),
+            "metrics": {name: metric.to_mapping() for name, metric in self.metrics.items()},
+            "feature_dimensions": dict(self.feature_dimensions),
+            "equivalence_audit": dict(self.equivalence_audit),
+            "strongest_classical_control": self.strongest_classical_control,
+            "density_minus_strongest_control": self.density_minus_strongest_control,
+            "density_minus_ablation": self.density_minus_ablation,
+            "density_information_novel": self.density_information_novel,
+            "promotion_interpretation": (
+                "The current density constructor is information-equivalent to the "
+                "trace-normalized covariance control. Predictive gains over weaker controls "
+                "cannot establish new representation information."
+            ),
+        }
+        if include_predictions:
+            value["test_labels"] = np.asarray(self.test_labels).astype(str).tolist()
+            value["predictions"] = {
+                key: np.asarray(pred).astype(str).tolist()
+                for key, pred in self.predictions.items()
+            }
+        return value
+
+
+def benchmark_e001_embeddings(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    split: IndexSplit,
+    *,
+    ridge: float = 1e-3,
+    center_tokens: bool = True,
+    covariance_regularization: float = 1e-6,
+) -> E001RepresentationBenchmarkResult:
+    """Run the promotion-oriented E001 density-vs-classical control gauntlet.
+
+    The exact ``normalized_covariance`` control is intentionally present even though
+    it is mathematically equivalent to the current density constructor. This makes
+    the information ceiling executable rather than merely documented.
+    """
+
+    values, target = _validate_embedding_benchmark(embeddings, labels, split)
+    train = split.train_indices
+    test = split.test_indices
+    y_train = target[train]
+    y_test = target[test]
+
+    states = np.stack([density_from_samples(x, center=center_tokens) for x in values])
+    density_features = np.stack([vectorize_density(rho) for rho in states])
+    normalized_covariance_features = np.stack(
+        [
+            vectorize_density(trace_normalized_second_moment(x, center=center_tokens))
+            for x in values
+        ]
+    )
+    diagonal_features = np.stack([np.diag(rho).real for rho in states])
+    pooled_features = np.concatenate([values.mean(axis=1), values.std(axis=1)], axis=1)
+    centered_covariances = np.stack(
+        [_covariance_matrix(x, center=center_tokens) for x in values]
+    )
+    covariance_features = np.stack(
+        [_symmetric_real_vector(cov) for cov in centered_covariances]
+    )
+    log_covariance_features = _log_covariance_features(
+        centered_covariances,
+        regularization=covariance_regularization,
+    )
+    bilinear_matrices = np.stack([_covariance_matrix(x, center=False) for x in values])
+    bilinear_features = np.stack(
+        [_symmetric_real_vector(matrix) for matrix in bilinear_matrices]
+    )
+    pca_features, pca_dimension = _train_only_pca_features(
+        values,
+        train,
+        max_components=density_features.shape[1],
+    )
+    ablated_features = np.stack(
+        [vectorize_density(remove_density_offdiagonals(rho)) for rho in states]
+    )
+
+    feature_sets = {
+        "density": density_features,
+        "normalized_covariance": normalized_covariance_features,
+        "covariance": covariance_features,
+        "log_covariance": log_covariance_features,
+        "bilinear_second_moment": bilinear_features,
+        "pooled_mean_std": pooled_features,
+        "pca_flattened": pca_features,
+        "diagonal_density": diagonal_features,
+    }
+    models = {
+        name: _fit_readout(features[train], y_train, ridge=ridge)
+        for name, features in feature_sets.items()
+    }
+    predictions = {
+        name: model.predict(feature_sets[name][test])
+        for name, model in models.items()
+    }
+    predictions["offdiagonal_ablation"] = models["density"].predict(ablated_features[test])
+    metrics = {name: _metrics(y_test, pred) for name, pred in predictions.items()}
+
+    classical_controls = (
+        "normalized_covariance",
+        "covariance",
+        "log_covariance",
+        "bilinear_second_moment",
+        "pooled_mean_std",
+        "pca_flattened",
+        "diagonal_density",
+    )
+    strongest = max(
+        classical_controls,
+        key=lambda name: (metrics[name].balanced_accuracy, name),
+    )
+    audit = audit_embedding_batch(values, center_tokens=center_tokens).to_mapping()
+    # This is a hard invariant of the current constructor. If numerical drift ever
+    # breaks it, the benchmark should fail instead of changing the scientific story.
+    if not audit["equivalent_within_tolerance"]:
+        raise RuntimeError("density/normalized-covariance equivalence invariant failed")
+    if not np.array_equal(predictions["density"], predictions["normalized_covariance"]):
+        raise RuntimeError("equivalent density/covariance features produced different predictions")
+
+    dimensions = {name: int(features.shape[1]) for name, features in feature_sets.items()}
+    dimensions["offdiagonal_ablation"] = int(ablated_features.shape[1])
+    dimensions["pca_flattened"] = pca_dimension
+    return E001RepresentationBenchmarkResult(
+        classes=tuple(str(value) for value in models["density"].classes.tolist()),
+        split_name=split.name,
+        metrics=metrics,
+        feature_dimensions=dimensions,
+        predictions=predictions,
+        test_labels=y_test,
+        equivalence_audit=audit,
+        strongest_classical_control=strongest,
     )
