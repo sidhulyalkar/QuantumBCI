@@ -231,6 +231,11 @@ def run_kumar2024_study(
     authorities: list[Any] = []
     cases: list[LongitudinalE001CaseResult] = []
     for subject in config.subjects:
+        subject_record = raw_fingerprint["by_subject"].get(str(int(subject)))
+        if not isinstance(subject_record, dict) or not subject_record.get("fingerprint"):
+            raise RuntimeError(
+                f"raw fingerprint manifest lacks participant fingerprint for subject {subject}"
+            )
         data = collect_moabb(
             dataset,
             paradigm,
@@ -242,7 +247,7 @@ def run_kumar2024_study(
             dataset_spec,
             subject=int(subject),
             config=config,
-            upstream_dataset_fingerprint=raw_fingerprint["fingerprint"],
+            upstream_dataset_fingerprint=str(subject_record["fingerprint"]),
             quantumbci_source_sha=quantumbci_source_sha,
             neuros_source_sha=neuros_source_sha,
         )
