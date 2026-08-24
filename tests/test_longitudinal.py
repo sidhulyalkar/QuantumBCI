@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import pytest
 
 from quantumbci.longitudinal import (
     evaluate_density_information_gate,
@@ -71,18 +72,36 @@ def _fixture(seed: int) -> tuple[_Data, np.ndarray]:
     return _Data(y=labels), np.stack(rows)
 
 
-def test_longitudinal_case_reuses_fixed_authority_across_budgets() -> None:
-    data, representations = _fixture(8)
-    authority = _Authority("p1", "p1-s3")
-    result = run_longitudinal_e001_case(
+def _run(
+    data: _Data,
+    authority: _Authority,
+    representations: np.ndarray,
+    *,
+    budgets: tuple[int, ...] = (0, 2, 4),
+    qbc_sha: str = "qbc-test-sha",
+):
+    return run_longitudinal_e001_case(
         data,
         authority,
         representations,
         representation_id="fixture-tokens-v1",
-        budgets_per_class=(0, 2, 4),
+        budgets_per_class=budgets,
+        upstream_dataset_fingerprint="raw-dataset-fixture-sha256",
+        quantumbci_source_sha=qbc_sha,
+        neuros_source_sha="neuros-test-sha",
     )
+
+
+def test_longitudinal_case_reuses_fixed_authority_across_budgets() -> None:
+    data, representations = _fixture(8)
+    authority = _Authority("p1", "p1-s3")
+    result = _run(data, authority, representations)
     assert len(result.rows) == 3
     assert len(result.representation_sha256) == 64
+    assert len(result.study_fingerprint) == 64
+    assert result.provenance["upstream_dataset_fingerprint"] == "raw-dataset-fixture-sha256"
+    assert result.provenance["quantumbci_source_sha"] == "qbc-test-sha"
+    assert result.provenance["neuros_source_sha"] == "neuros-test-sha"
     assert {row.evaluation_samples for row in result.rows} == {16}
     assert [row.calibration_samples for row in result.rows] == [0, 4, 8]
     assert all(row.authority_fingerprint == "authority-p1-s3" for row in result.rows)
@@ -94,16 +113,41 @@ def test_longitudinal_case_reuses_fixed_authority_across_budgets() -> None:
         )
 
 
+def test_study_fingerprint_binds_source_revisions() -> None:
+    data, representations = _fixture(9)
+    authority = _Authority("p1", "p1-s3")
+    first = _run(data, authority, representations, qbc_sha="qbc-a")
+    second = _run(data, authority, representations, qbc_sha="qbc-b")
+    assert first.representation_sha256 == second.representation_sha256
+    assert first.authority == second.authority
+    assert first.study_fingerprint != second.study_fingerprint
+
+
+def test_longitudinal_case_requires_complete_upstream_provenance() -> None:
+    data, representations = _fixture(10)
+    authority = _Authority("p1", "p1-s3")
+    with pytest.raises(ValueError, match="upstream_dataset_fingerprint"):
+        run_longitudinal_e001_case(
+            data,
+            authority,
+            representations,
+            representation_id="fixture",
+            budgets_per_class=(0,),
+            upstream_dataset_fingerprint="",
+            quantumbci_source_sha="qbc",
+            neuros_source_sha="neuros",
+        )
+
+
 def test_participant_bootstrap_never_bootstraps_windows() -> None:
     rows = []
     for subject, seed in (("p1", 3), ("p2", 5), ("p3", 7)):
         data, representations = _fixture(seed)
-        result = run_longitudinal_e001_case(
+        result = _run(
             data,
             _Authority(subject, f"{subject}-s3"),
             representations,
-            representation_id="fixture-tokens-v1",
-            budgets_per_class=(0, 2),
+            budgets=(0, 2),
         )
         rows.extend(result.rows)
 
@@ -125,20 +169,35 @@ def test_participant_bootstrap_never_bootstraps_windows() -> None:
     assert gate["promotion_eligible"] is False
 
 
+def test_participant_bootstrap_requires_same_units_at_every_budget() -> None:
+    rows = []
+    for subject, seed in (("p1", 31), ("p2", 33), ("p3", 35)):
+        data, representations = _fixture(seed)
+        rows.extend(
+            _run(
+                data,
+                _Authority(subject, f"{subject}-s3"),
+                representations,
+                budgets=(0, 2),
+            ).rows
+        )
+    incomplete = [
+        row
+        for row in rows
+        if not (row.calibration_per_class == 2 and row.case_metadata["subject"] == "p3")
+    ]
+    with pytest.raises(ValueError, match="participant membership differs"):
+        paired_participant_bootstrap(
+            incomplete,
+            control="normalized_covariance",
+            n_resamples=100,
+        )
+
+
 def test_participant_bootstrap_fails_without_participant_metadata() -> None:
     data, representations = _fixture(4)
     authority = _Authority("p1", "case")
     authority.case_metadata = {}
-    row = run_longitudinal_e001_case(
-        data,
-        authority,
-        representations,
-        representation_id="fixture",
-        budgets_per_class=(0,),
-    ).rows[0]
-    try:
+    row = _run(data, authority, representations, budgets=(0,)).rows[0]
+    with pytest.raises(ValueError, match="participant-level inference"):
         paired_participant_bootstrap([row, row], control="covariance", n_resamples=100)
-    except ValueError as exc:
-        assert "participant-level inference" in str(exc)
-    else:
-        raise AssertionError("missing participant metadata must fail closed")
