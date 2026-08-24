@@ -50,15 +50,23 @@ IMPLEMENTED_MECHANISMS: dict[str, MechanismCard] = {
         name="density_geometry",
         claim_class=ClaimClass.QUANTUM_INSPIRED,
         hypothesis=(
-            "Trace-one positive-semidefinite latent states preserve useful mixtures, "
-            "coherence-like cross-feature structure, or uncertainty beyond matched "
-            "classical covariance representations."
+            "Representing a trace-normalized Hermitian second moment as a density operator "
+            "may provide useful constrained normalization, spectral observables, or downstream "
+            "operator inductive bias. The current constructor is information-equivalent to "
+            "trace-normalized covariance and therefore cannot claim additional representation "
+            "information from density notation alone."
         ),
         observables=("purity", "von_neumann_entropy", "l1_coherence"),
-        classical_alternatives=("covariance features", "PCA", "linear probes"),
+        classical_alternatives=(
+            "trace-normalized covariance",
+            "covariance/log-covariance geometry",
+            "bilinear second moments",
+            "PCA and linear probes",
+        ),
         falsifiers=(
-            "No reproducible gain over complexity-matched covariance baselines",
-            "Learned observables are unstable across subjects or resampling",
+            "Exact normalized-covariance control reproduces the same representation/predictions",
+            "Density-specific downstream constraints or observables add no reproducible held-out value",
+            "Claimed observables are unstable across subjects, sessions, or resampling",
         ),
     ),
     "lindblad_latent_dynamics": MechanismCard(
@@ -99,18 +107,29 @@ IMPLEMENTED_MECHANISMS: dict[str, MechanismCard] = {
         observables=("Fourier-basis measurement probabilities",),
         classical_alternatives=("FFT", "Goertzel transform"),
         falsifiers=(
-            "End-to-end resource accounting removes the claimed computational benefit",
-            "The required observable is more cheaply obtained by a classical transform",
+            "End-to-end classical computation is faster at matched tolerance",
+            "State preparation or sampling dominates the resource budget",
+        ),
+    ),
+    "qlsa_resource_study": MechanismCard(
+        name="qlsa_resource_study",
+        claim_class=ClaimClass.QUANTUM_ALGORITHM,
+        hypothesis=(
+            "A quantum linear-system algorithm may estimate selected observables of a sparse, "
+            "well-conditioned encoded system without reconstructing the full solution vector."
+        ),
+        observables=("selected solution observable", "resource ledger"),
+        classical_alternatives=("dense solve", "sparse iterative solver"),
+        falsifiers=(
+            "The application requires a full classical solution vector",
+            "Conditioning/state-preparation/readout erase the algorithmic advantage",
         ),
     ),
 }
 
 
 def mechanism_card(name: str) -> MechanismCard:
-    """Return the registered card for an implemented mechanism."""
-
     try:
         return IMPLEMENTED_MECHANISMS[name]
     except KeyError as exc:
-        options = ", ".join(sorted(IMPLEMENTED_MECHANISMS))
-        raise KeyError(f"Unknown mechanism {name!r}. Available: {options}") from exc
+        raise KeyError(f"Unknown mechanism {name!r}; choose from {sorted(IMPLEMENTED_MECHANISMS)}") from exc
