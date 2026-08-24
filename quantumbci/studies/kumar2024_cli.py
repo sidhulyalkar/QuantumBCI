@@ -6,7 +6,8 @@ import argparse
 import json
 from pathlib import Path
 
-from .kumar2024 import Kumar2024StudyConfig, run_kumar2024_study
+from .kumar2024 import Kumar2024StudyConfig
+from .kumar2024_execution import run_kumar2024_study
 
 
 def _int_list(value: str) -> tuple[int, ...]:
