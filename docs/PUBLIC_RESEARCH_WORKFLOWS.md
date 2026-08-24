@@ -67,6 +67,12 @@ Paths are resolved relative to the recipe file. The four inputs are SHA-256 fing
 
 QuantumBCI does not create a random split for a recipe. The train/test index files are part of the scientific contract.
 
+A machine-readable JSON Schema for tooling and editor integrations is shipped at:
+
+`quantumbci/schemas/recipe-v1.schema.json`
+
+The runtime preflight remains authoritative because it also checks properties a static JSON Schema cannot establish, such as NumPy tensor dimensions, non-finite values, split overlap/range, and training-class support.
+
 ## 2. Validate before running
 
 ```bash
@@ -74,9 +80,11 @@ quantumbci recipe validate study.json
 quantumbci recipe validate study.json --json
 ```
 
-Validation checks that inputs exist, the claim ceiling remains `quantum_inspired`, the benchmark parameters are valid, and all input files can be fingerprinted.
+Validation checks that inputs exist, the claim ceiling remains `quantum_inspired`, the benchmark parameters are valid, inputs can be fingerprinted, tensors have the expected `examples × tokens × features` shape, and the explicit split is structurally legal before fitting anything.
 
 This is also a useful handoff check when another lab sends you a recipe plus separately distributed embeddings: compare the input SHA-256 values before executing anything.
+
+The scientific fingerprint is content-addressed. Local filenames and MIME guesses do not enter scientific identity, so two groups holding byte-identical inputs under different local filenames can still derive the same fingerprint when the recipe semantics and QuantumBCI source revision match.
 
 ## 3. Run into the normal evidence registry
 
@@ -97,9 +105,9 @@ report.md
 report.html
 ```
 
-`inputs.json` records file hashes and array shapes. `artifact_hashes.json` protects the generated evidence files. `run.json` carries the final scientific fingerprint and claim/evidence metadata.
+`inputs.json` records content hashes, array shapes/dtypes, split metadata, and handoff filenames. `artifact_hashes.json` is the closed-world checksum ledger for the generated evidence files. `run.json` carries the final scientific fingerprint and claim/evidence metadata.
 
-The recipe runner intentionally does **not** copy the source embeddings into the run bundle. Neural embeddings may be large, licensed, restricted, or derived from participant data. The evidence bundle records hashes and provenance so the source tensors can be distributed through the appropriate data channel.
+The recipe runner intentionally does **not** copy source embeddings into the run bundle. Neural embeddings may be large, licensed, restricted, or derived from participant data. The evidence bundle records hashes and provenance so the source tensors can be distributed through the appropriate data channel.
 
 ## 4. Verify a run later
 
@@ -107,9 +115,11 @@ The recipe runner intentionally does **not** copy the source embeddings into the
 quantumbci runs verify <RUN_ID>
 ```
 
-Verification recomputes every hash in `artifact_hashes.json`. Missing or modified files make the run invalid.
+Verification recomputes every hash in `artifact_hashes.json`. Missing, modified, unexpectedly added, or structurally unsafe ledger entries make the run invalid.
 
-Both public export paths require a valid artifact ledger. This prevents a report from being edited after the fact and then shared under the original scientific fingerprint.
+Both public export paths require a valid artifact ledger. This prevents an edited or augmented run directory from being shared under the original evidence state without explicitly regenerating the run.
+
+The checksum ledger is an **integrity mechanism, not an authenticity signature**. It detects corruption and post-run edits relative to the ledger; it does not prove who authored the ledger. Repositories that require signed provenance should layer their institutional signing or attestation system on top of the exported research object.
 
 ## 5. Export a Research Object
 
@@ -121,7 +131,7 @@ quantumbci runs export <RUN_ID> \
 
 Add `--archive` to also create a zip package.
 
-The export follows the minimal RO-Crate 1.3 structure:
+The export follows the RO-Crate 1.3 Recommendation structure:
 
 ```text
 my-study/
@@ -131,7 +141,7 @@ my-study/
     └── <QuantumBCI run artifacts>
 ```
 
-The metadata document uses the RO-Crate 1.3 context and describes the root Dataset, QuantumBCI software, and each evidence file. The HTML preview gives humans a zero-server landing page.
+The metadata document uses the RO-Crate 1.3 JSON-LD context and describes the root Dataset, QuantumBCI software, and each evidence file. The HTML preview gives humans a zero-server landing page.
 
 QuantumBCI does not claim external RO-Crate validator certification. Publication pipelines should run the validator required by their repository or institution.
 
@@ -154,12 +164,14 @@ This creates:
         ├── dataset_description.json
         └── evidence/
             └── <RUN_ID>/
-                └── <QuantumBCI evidence bundle>
+                ├── <QuantumBCI evidence bundle>
+                ├── README.md
+                └── quantumbci_export.json
 ```
 
-The derivative-level `dataset_description.json` records `DatasetType=derivative`, `GeneratedBy=QuantumBCI`, the explicit BIDS version supplied by the researcher, and an optional source-dataset URL.
+The derivative-level `dataset_description.json` records `DatasetType=derivative`, `GeneratedBy=QuantumBCI`, the explicit BIDS version supplied by the researcher, code provenance, and an optional source-dataset URL. A pre-existing QuantumBCI derivative container must declare the same BIDS version before another run is added.
 
-The generic QuantumBCI evidence files are **not** claimed to implement a modality-specific standardized BIDS derivative datatype. This is a BIDS-aware provenance/discovery container, designed to coexist safely with standardized EEG/iEEG derivatives.
+The generic QuantumBCI evidence files are **not** claimed to implement a modality-specific standardized BIDS derivative datatype. This is a BIDS-aware provenance/discovery container, designed to coexist safely with standardized EEG/iEEG derivatives. `quantumbci_export.json` records that distinction explicitly for downstream tooling.
 
 ## Why BIDS, MOABB, and RO-Crate fit this project
 
@@ -193,7 +205,7 @@ Start only from an observable that survives the classical/quantum-inspired evide
 
 ### Reproducibility and archival workflows
 
-Archive RO-Crates rather than screenshots or notebook state. The run fingerprint, source tensor hashes, artifact hashes, and machine-readable metrics remain available even when the original interactive environment is gone.
+Archive RO-Crates rather than screenshots or notebook state. The run fingerprint, source tensor hashes, artifact hashes, machine-readable metrics, recipe contract, and human preview remain available even when the original interactive environment is gone.
 
 ## A useful public benchmark pattern
 
