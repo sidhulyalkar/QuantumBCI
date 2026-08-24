@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use QuantumBCI in research, please cite the software and the specific dataset/model sources used by your recipe."
+message: "If you use QuantumBCI in research, please cite the software and the specific dataset/model sources used by your study."
 title: "QuantumBCI: a falsifiable workbench for quantum-structured neural mechanism research"
 type: software
 authors:
@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.6.0"
+version: "0.6.1"
 keywords:
   - neuroscience
   - EEG
@@ -17,4 +17,6 @@ keywords:
   - mechanistic interpretability
   - mathematical equivalence
   - longitudinal evaluation
+  - Kumar2024
+  - MOABB
   - reproducible research
