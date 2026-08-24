@@ -70,5 +70,5 @@ def test_e001_audit_cli_runs_control_gauntlet_and_writes_output(tmp_path: Path, 
     assert payload["equivalence_audit"]["equivalent_within_tolerance"] is True
     assert "normalized_covariance" in payload["metrics"]
     assert "log_covariance" in payload["metrics"]
-    assert "pca" in payload["metrics"]
+    assert "pca_flattened" in payload["metrics"]
     assert payload["strongest_classical_control"] in payload["metrics"]
