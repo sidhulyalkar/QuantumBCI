@@ -66,42 +66,47 @@ jobs:
           python -m pip install -e _deps/neuros-v1/packages/neuros-models
           python -m pip install -e '_deps/neuros-v1/packages/neuros-foundation[evidence]'
           python -m pip install -e .
-      - name: Resolve preregistered study scope
-        id: scope
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ inputs.profile }}" == "full" ]]; then
-            echo "subjects=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18" >> "$GITHUB_OUTPUT"
-            echo "target_args=--all-target-sessions" >> "$GITHUB_OUTPUT"
-          else
-            echo "subjects=${{ inputs.subjects }}" >> "$GITHUB_OUTPUT"
-            echo "target_args=--held-out-sessions ${{ inputs.held_out_sessions }}" >> "$GITHUB_OUTPUT"
-          fi
       - name: Run equivalence-first Kumar2024 E001 study
         shell: bash
+        env:
+          PROFILE: ${{ inputs.profile }}
+          SUBJECTS_INPUT: ${{ inputs.subjects }}
+          HELDOUT_INPUT: ${{ inputs.held_out_sessions }}
+          BUDGETS_INPUT: ${{ inputs.budgets }}
+          SPLIT_SEED_INPUT: ${{ inputs.split_seed }}
         run: |
           set -euo pipefail
-          python scripts/evidence/run_kumar2024_e001.py \
-            --subjects "${{ steps.scope.outputs.subjects }}" \
-            ${{ steps.scope.outputs.target_args }} \
-            --budgets "${{ inputs.budgets }}" \
-            --split-seed "${{ inputs.split_seed }}" \
-            --evaluation-fraction 0.5 \
-            --fmin 8 \
-            --fmax 30 \
-            --quantumbci-source-sha "$GITHUB_SHA" \
-            --neuros-source-sha "$NEUROS_SHA" \
+          common_args=(
+            --budgets "$BUDGETS_INPUT"
+            --split-seed "$SPLIT_SEED_INPUT"
+            --evaluation-fraction 0.5
+            --fmin 8
+            --fmax 30
+            --quantumbci-source-sha "$GITHUB_SHA"
+            --neuros-source-sha "$NEUROS_SHA"
             --output "$RUNNER_TEMP/quantumbci-kumar2024"
+          )
+          if [[ "$PROFILE" == "full" ]]; then
+            quantumbci-kumar2024 \
+              --subjects "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18" \
+              --all-target-sessions \
+              "${common_args[@]}"
+          else
+            quantumbci-kumar2024 \
+              --subjects "$SUBJECTS_INPUT" \
+              --held-out-sessions "$HELDOUT_INPUT" \
+              "${common_args[@]}"
+          fi
       - name: Verify closed-world bundle and create RO-Crate
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import os
           from pathlib import Path
           from quantumbci.exporting import export_run_ro_crate, verify_run_artifacts
 
-          root = Path("${{ runner.temp }}")
+          root = Path(os.environ["RUNNER_TEMP"])
           study = root / "quantumbci-kumar2024"
           verification = verify_run_artifacts(study)
           assert verification["valid"], verification
