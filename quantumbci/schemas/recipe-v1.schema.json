@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sidhulyalkar/QuantumBCI/blob/main/quantumbci/schemas/recipe-v1.schema.json",
+  "title": "QuantumBCI frozen-embedding recipe v1",
+  "description": "Portable contract for a quantum-inspired density benchmark on frozen neural embeddings with explicit train/test authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "claim_class",
+    "evidence_tier",
+    "data"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_class": {
+      "const": "quantum_inspired"
+    },
+    "evidence_tier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_dataset": {
+      "type": ["string", "null"]
+    },
+    "source_model": {
+      "type": ["string", "null"]
+    },
+    "notes": {
+      "type": ["string", "null"]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "embeddings",
+        "labels",
+        "train_indices",
+        "test_indices"
+      ],
+      "properties": {
+        "embeddings": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labels": {
+          "type": "string",
+          "minLength": 1
+        },
+        "train_indices": {
+          "type": "string",
+          "minLength": 1
+        },
+        "test_indices": {
+          "type": "string",
+          "minLength": 1
+        },
+        "split_name": {
+          "type": "string",
+          "minLength": 1,
+          "default": "explicit"
+        }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ridge": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.001
+        }
+      }
+    }
+  }
+}
