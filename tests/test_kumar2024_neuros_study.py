@@ -11,6 +11,7 @@ import pytest
 from quantumbci.exporting import export_run_ro_crate, verify_run_artifacts
 import quantumbci.studies as study
 from quantumbci.studies.kumar2024 import _write_study_bundle
+from quantumbci.studies.kumar2024_execution import _finalize_prepared_bundle
 
 
 fm = pytest.importorskip("neuros.foundation_models")
@@ -154,9 +155,11 @@ def test_two_participant_kumar_bundle_is_closed_world_and_export_ready(tmp_path:
         neuros_source_sha="neuros-study-test",
         overwrite=False,
     )
+    finalized = _finalize_prepared_bundle(output)
 
     assert result["authority_cases"] == 2
     assert result["equivalence_promotion_eligible"] is False
+    assert finalized["valid"] is True
     assert verify_run_artifacts(output)["valid"] is True
     assert (output / "run.json").is_file()
     assert (output / "dataset_fingerprint.json").is_file()
@@ -169,6 +172,19 @@ def test_two_participant_kumar_bundle_is_closed_world_and_export_ready(tmp_path:
 
     ledger = json.loads((output / "evidence_ledger.json").read_text())
     assert ledger["information_novelty_promotion_eligible"] is False
+    assert ledger["representation_adaptation"] == {
+        "static_feature_scope": "prepared_once_per_participant_tensor",
+        "pca_fit_scope": "source_history_only",
+        "target_calibration_changes": "readout_only",
+        "final_evaluation_in_representation_fit": False,
+    }
+    manifest = json.loads((output / "study_manifest.json").read_text())
+    assert manifest["representation_adaptation"] == ledger["representation_adaptation"]
+    representation = json.loads((output / "representation_index.json").read_text())
+    assert representation["control_preparation"] == ledger["representation_adaptation"]
+    run_record = json.loads((output / "run.json").read_text())
+    assert run_record["representation_adaptation"] == ledger["representation_adaptation"]
+
     bootstrap = json.loads((output / "bootstrap_metrics.json").read_text())
     normalized = bootstrap["controls"]["normalized_covariance"]["summaries"]
     assert all(abs(item["observed_mean_delta"]) < 1e-12 for item in normalized)
@@ -180,6 +196,10 @@ def test_two_participant_kumar_bundle_is_closed_world_and_export_ready(tmp_path:
     assert {row["subject"] for row in rows} == {"1", "10"}
     assert {row["original_protocol"] for row in rows} == {"GR", "PAR"}
     assert "normalized_covariance" in {row["method"] for row in rows}
+
+    report = (output / "report.md").read_text(encoding="utf-8")
+    assert "Representation adaptation contract" in report
+    assert "chronological source history only" in report
 
     crate = export_run_ro_crate(output, tmp_path / "crate")
     assert crate.joinpath("ro-crate-metadata.json").is_file()
