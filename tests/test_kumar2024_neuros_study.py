@@ -9,7 +9,8 @@ import numpy as np
 import pytest
 
 from quantumbci.exporting import export_run_ro_crate, verify_run_artifacts
-from quantumbci.studies import kumar2024 as study
+import quantumbci.studies as study
+from quantumbci.studies.kumar2024 import _write_study_bundle
 
 
 fm = pytest.importorskip("neuros.foundation_models")
@@ -94,10 +95,13 @@ def test_kumar_subject_matches_merged_neuros_authority_semantics() -> None:
     assert authority.case_metadata["subject"] == 1
     assert authority.case_metadata["original_protocol"] == "GR"
     assert authority.case_metadata["split_seed"] == expected_seed
+    assert authority.case_metadata["pca_fit_scope"] == "source_history_only"
     assert case.provenance["upstream_dataset_fingerprint"] == "f" * 64
     assert len(case.representation_sha256) == 64
     assert [row.calibration_samples for row in case.rows] == [0, 2, 4]
+    assert len({row.result.feature_dimensions["pca_flattened"] for row in case.rows}) == 1
     for row in case.rows:
+        assert "pca=source-history-only" in row.result.split_name
         assert row.result.equivalence_audit["equivalent_within_tolerance"] is True
         assert np.array_equal(
             row.result.predictions["density"],
@@ -128,16 +132,18 @@ def test_two_participant_kumar_bundle_is_closed_world_and_export_ready(tmp_path:
         cases.extend(subject_cases)
 
     raw_fingerprint = {
-        "schema_version": 1,
-        "kind": "raw_source_content_fingerprint",
+        "schema_version": 2,
+        "kind": "kumar2024_selected_raw_source_content_fingerprint",
         "dataset_key": "kumar2024",
         "dataset_id": "moabb-kumar2024",
         "subjects": [1, 10],
+        "files": [],
         "by_subject": {},
+        "selection": {"include": [], "exclude": ["Race/**"]},
         "fingerprint": "a" * 64,
     }
     output = tmp_path / "study"
-    result = study._write_study_bundle(
+    result = _write_study_bundle(
         output,
         config=config,
         dataset_spec=spec,
