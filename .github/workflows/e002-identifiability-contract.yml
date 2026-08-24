@@ -1,0 +1,106 @@
+name: E002 identifiability contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-e002-identifiability-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify installed qubit affine-equivalence audit
+        run: |
+          quantumbci-audit dynamics \
+            --omega-x 1.2 \
+            --omega-z 0.8 \
+            --gamma-dephasing 0.25 \
+            --gamma-relaxation 0.35 \
+            --output /tmp/e002-dynamics.json \
+            --json > /tmp/e002-dynamics-stdout.json
+          python - <<'PY'
+          import json
+          payload = json.load(open('/tmp/e002-dynamics.json'))
+          assert payload['affine_equivalence']['equivalent_within_tolerance'] is True
+          assert payload['gauge_nonidentifiability']['equivalent_within_tolerance'] is True
+          assert payload['dynamical_information_novel'] is False
+          PY
+
+      - name: Qualify installed moderate-SNR synthetic recovery
+        run: |
+          quantumbci-audit e002-synthetic \
+            --seed 2027 \
+            --noise-std 0.003 \
+            --output /tmp/e002-synthetic.json \
+            --json > /tmp/e002-synthetic-stdout.json
+          python - <<'PY'
+          import json
+          payload = json.load(open('/tmp/e002-synthetic.json'))
+          assert payload['synthetic_identifiability_gate_pass'] is True
+          assert payload['median_normalized_recovery_error'] <= 0.20
+          assert payload['systematic_sign_inversions'] == 0
+          assert payload['affine_equivalence_pass'] is True
+          assert payload['gauge_nonidentifiability_witness_pass'] is True
+          assert payload['physical_quantum_promotion_eligible'] is False
+          PY
+
+      - name: Qualify executable E002 manifest stages
+        run: |
+          mkdir -p /tmp/e002-stage
+          cd /tmp/e002-stage
+          python -m quantumbci.experiments.tasks \
+            synthetic-recovery E002 \
+            --seed 2027 \
+            --noise-std 0.003 \
+            --output synthetic_recovery.json
+          python -m quantumbci.experiments.tasks \
+            gate E002 identifiability \
+            --input synthetic_recovery.json \
+            --output identifiability_gate.json
+          python - <<'PY'
+          import json
+          recovery = json.load(open('synthetic_recovery.json'))
+          gate = json.load(open('identifiability_gate.json'))
+          assert recovery['status'] == 'pass'
+          assert gate['status'] == 'pass'
+          assert gate['trajectory_contract_stage_eligible'] is True
+          assert gate['dynamical_information_novel'] is False
+          PY
+
+      - name: Qualify E002 manifest and wheel contents
+        run: |
+          quantumbci experiments validate E002_lindblad_dynamics --json
+          python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-wheel
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import zipfile
+
+          source = json.loads(Path('experiments/manifests/E002_lindblad_dynamics.json').read_text())
+          packaged = json.loads(Path('quantumbci/experiments/manifests/E002_lindblad_dynamics.json').read_text())
+          assert source == packaged
+
+          wheels = list(Path('/tmp/quantumbci-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          expected = {
+              'quantumbci/dynamics_equivalence.py',
+              'quantumbci/e002_synthetic.py',
+              'quantumbci/experiments/manifests/E002_lindblad_dynamics.json',
+          }
+          missing = sorted(expected - names)
+          assert not missing, f'E002 modules missing from wheel: {missing}'
+          PY
