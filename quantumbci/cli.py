@@ -14,8 +14,10 @@ from .benchmarking import IndexSplit, benchmark_density_embeddings
 from .contextuality import order_effect, projector
 from .experiments.manifest import ManifestError, load_manifest
 from .experiments.orchestration import build_plan, materialize_plan, render_plan
+from .exporting import export_run_bids_derivative_container, export_run_ro_crate, verify_run_artifacts
 from .interpretability import mechanism_delta, state_signature
 from .open_system import dephasing_collapse, evolve_lindblad
+from .recipes import load_recipe, run_recipe, write_recipe_template
 from .states import project_density_matrix
 from .workbench import RunStore, doctor_report, find_manifest_files, load_config, run_density_smoke, write_default_config
 
@@ -128,6 +130,62 @@ def _command_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_recipe_init(args: argparse.Namespace) -> int:
+    path = write_recipe_template(args.path, force=args.force)
+    print(f"Created {path}")
+    print(f"Next: quantumbci recipe validate {path}")
+    return 0
+
+
+def _command_recipe_validate(args: argparse.Namespace) -> int:
+    recipe = load_recipe(args.recipe)
+    payload = {
+        "valid": True,
+        "id": recipe.id,
+        "title": recipe.title,
+        "claim_class": "quantum_inspired",
+        "evidence_tier": recipe.evidence_tier,
+        "split_name": recipe.split_name,
+        "source_dataset": recipe.source_dataset,
+        "source_model": recipe.source_model,
+        "inputs": recipe.input_fingerprints(),
+    }
+    if args.json:
+        _print_json(payload)
+    else:
+        print(f"valid: {recipe.id}")
+        print(f"title: {recipe.title}")
+        print(f"split: {recipe.split_name}")
+        print(f"evidence tier: {recipe.evidence_tier}")
+        print("claim ceiling: quantum_inspired")
+        for name, value in payload["inputs"].items():
+            print(f"{name}: sha256:{value['sha256'][:12]} ({value['bytes']} bytes)")
+    return 0
+
+
+def _command_recipe_run(args: argparse.Namespace) -> int:
+    result = run_recipe(args.recipe, _config_from_args(args))
+    payload = {
+        "run_id": result.run_id,
+        "run_dir": str(result.run_dir),
+        "report": str(result.run_dir / "report.html"),
+        "scientific_fingerprint": result.scientific_fingerprint,
+        "metrics": result.metrics,
+    }
+    if args.json:
+        _print_json(payload)
+    else:
+        print("QuantumBCI recipe run: completed")
+        print(f"Run: {result.run_id}")
+        print(f"Artifacts: {result.run_dir}")
+        print(f"Report: {result.run_dir / 'report.html'}")
+        print(f"Fingerprint: {result.scientific_fingerprint}")
+        print(f"Density BA: {result.metrics['density']['balanced_accuracy']:.3f}")
+        print(f"Mechanism delta: {result.metrics['density_minus_ablation']:+.3f}")
+        print("Claim ceiling: quantum_inspired")
+    return 0
+
+
 def _command_demo(args: argparse.Namespace) -> int:
     result = _mechanism_demo()
     if args.json:
@@ -205,8 +263,12 @@ def _command_experiments_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_store(args: argparse.Namespace) -> RunStore:
+    return RunStore(_config_from_args(args).artifact_root)
+
+
 def _command_runs_list(args: argparse.Namespace) -> int:
-    rows = RunStore(_config_from_args(args).artifact_root).records()
+    rows = _run_store(args).records()
     if args.json:
         _print_json(rows)
     else:
@@ -222,7 +284,7 @@ def _command_runs_list(args: argparse.Namespace) -> int:
 
 
 def _command_runs_show(args: argparse.Namespace) -> int:
-    row = RunStore(_config_from_args(args).artifact_root).load(args.run_id)
+    row = _run_store(args).load(args.run_id)
     if args.json:
         _print_json(row)
     else:
@@ -236,6 +298,43 @@ def _command_runs_show(args: argparse.Namespace) -> int:
         for name, value in sorted(row.get("metrics", {}).items()):
             if isinstance(value, (int, float)):
                 print(f"{name}: {value:.6f}")
+    return 0
+
+
+def _command_runs_verify(args: argparse.Namespace) -> int:
+    row = _run_store(args).load(args.run_id)
+    result = verify_run_artifacts(row["run_dir"])
+    if args.json:
+        _print_json(result)
+    else:
+        print(f"run: {args.run_id}")
+        print(f"artifact integrity: {'valid' if result['valid'] else 'INVALID'}")
+        print(f"verified files: {len(result['verified'])}")
+        if result["missing"]:
+            print("missing: " + ", ".join(result["missing"]))
+        if result["mismatched"]:
+            print("mismatched: " + ", ".join(result["mismatched"]))
+    return 0 if result["valid"] else 2
+
+
+def _command_runs_export(args: argparse.Namespace) -> int:
+    row = _run_store(args).load(args.run_id)
+    if args.format == "ro-crate":
+        path = export_run_ro_crate(row["run_dir"], args.output, archive=args.archive)
+    else:
+        if not args.bids_version:
+            raise ValueError("--bids-version is required for --format bids")
+        path = export_run_bids_derivative_container(
+            row["run_dir"],
+            args.output,
+            bids_version=args.bids_version,
+            source_dataset_url=args.source_dataset_url,
+        )
+    payload = {"run_id": args.run_id, "format": args.format, "export": str(path)}
+    if args.json:
+        _print_json(payload)
+    else:
+        print(f"exported {args.format}: {path}")
     return 0
 
 
@@ -273,6 +372,22 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--json", action="store_true")
     benchmark.set_defaults(func=_command_benchmark)
 
+    recipe = subparsers.add_parser("recipe", help="create, validate, and run portable study recipes")
+    recipe_sub = recipe.add_subparsers(dest="recipe_command", required=True)
+    recipe_init = recipe_sub.add_parser("init", help="create a frozen-embedding recipe template")
+    recipe_init.add_argument("path", nargs="?", default="quantumbci-recipe.json")
+    recipe_init.add_argument("--force", action="store_true")
+    recipe_init.set_defaults(func=_command_recipe_init)
+    recipe_validate = recipe_sub.add_parser("validate", help="validate recipe inputs and fingerprint them")
+    recipe_validate.add_argument("recipe")
+    recipe_validate.add_argument("--json", action="store_true")
+    recipe_validate.set_defaults(func=_command_recipe_validate)
+    recipe_run = recipe_sub.add_parser("run", help="execute a recipe into the local RunStore")
+    recipe_run.add_argument("recipe")
+    recipe_run.add_argument("--config")
+    recipe_run.add_argument("--json", action="store_true")
+    recipe_run.set_defaults(func=_command_recipe_run)
+
     demo = subparsers.add_parser("demo", help="run the original compact mechanism demo")
     demo.add_argument("--json", action="store_true")
     demo.set_defaults(func=_command_demo)
@@ -295,7 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
     exp_plan.add_argument("--json", action="store_true")
     exp_plan.set_defaults(func=_command_experiments_plan)
 
-    runs = subparsers.add_parser("runs", help="inspect local run artifacts")
+    runs = subparsers.add_parser("runs", help="inspect, verify, and export local run artifacts")
     run_sub = runs.add_subparsers(dest="runs_command", required=True)
     run_list = run_sub.add_parser("list", help="list local workbench runs")
     run_list.add_argument("--config")
@@ -306,6 +421,21 @@ def build_parser() -> argparse.ArgumentParser:
     run_show.add_argument("--config")
     run_show.add_argument("--json", action="store_true")
     run_show.set_defaults(func=_command_runs_show)
+    run_verify = run_sub.add_parser("verify", help="verify a run against its artifact SHA-256 ledger")
+    run_verify.add_argument("run_id")
+    run_verify.add_argument("--config")
+    run_verify.add_argument("--json", action="store_true")
+    run_verify.set_defaults(func=_command_runs_verify)
+    run_export = run_sub.add_parser("export", help="export a run as RO-Crate or into a BIDS-aware derivatives container")
+    run_export.add_argument("run_id")
+    run_export.add_argument("--config")
+    run_export.add_argument("--format", choices=("ro-crate", "bids"), default="ro-crate")
+    run_export.add_argument("--output", required=True)
+    run_export.add_argument("--archive", action="store_true", help="also create a zip for RO-Crate exports")
+    run_export.add_argument("--bids-version", help="explicit BIDS version for BIDS-aware export")
+    run_export.add_argument("--source-dataset-url")
+    run_export.add_argument("--json", action="store_true")
+    run_export.set_defaults(func=_command_runs_export)
     return parser
 
 

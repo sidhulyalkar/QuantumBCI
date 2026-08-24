@@ -85,6 +85,57 @@ The benchmark compares the same low-capacity readout family on:
 - the **fitted density readout after off-diagonal deletion**, which is an intervention rather than a
   separately refit model.
 
+## Portable study recipes and evidence objects
+
+For work that should survive outside one machine or one lab, use a recipe instead of a shell-history
+incantation:
+
+```bash
+quantumbci recipe init study.json
+quantumbci recipe validate study.json
+quantumbci recipe run study.json --config quantumbci.json
+```
+
+A recipe binds the dataset/model identifiers, benchmark parameters, explicit train/test authority,
+and SHA-256 content fingerprints of the four frozen input files. Validation preflights tensor shape,
+finite values, split disjointness/range, and training-class support before fitting anything.
+
+Scientific identity is **content-addressed, not filename-addressed**. If another lab holds the same
+bytes under different local filenames, the same recipe semantics and QuantumBCI source revision
+produce the same scientific fingerprint.
+
+Completed runs can be checked and shared:
+
+```bash
+quantumbci runs verify <RUN_ID>
+
+quantumbci runs export <RUN_ID> \
+  --format ro-crate \
+  --output shared/my-study
+
+quantumbci runs export <RUN_ID> \
+  --format bids \
+  --output /path/to/bids-root \
+  --bids-version <DATASET_BIDS_VERSION>
+```
+
+The RO-Crate exporter emits a self-contained **RO-Crate 1.3** evidence object with machine-readable
+JSON-LD metadata and a zero-server HTML preview. The BIDS path creates a derivative-level
+`dataset_description.json` and stores QuantumBCI evidence in an explicitly non-standardized
+`evidence/` namespace, so it can coexist with BIDS without pretending QuantumBCI JSON files are a
+formal modality derivative datatype.
+
+Before either export, QuantumBCI verifies the run’s closed-world artifact ledger. Missing, modified,
+or newly added top-level files invalidate export. These SHA-256 checks detect corruption and
+post-hoc edits; they are **not an authorship or authenticity signature**.
+
+The runner intentionally does not copy source embeddings into the evidence bundle by default.
+Embeddings can be huge, licensed, or derived from participant data. The bundle carries content
+hashes and provenance so source tensors can travel through the appropriate data-access channel.
+
+See [Public research workflows](docs/PUBLIC_RESEARCH_WORKFLOWS.md) for laboratory handoff, archival,
+MOABB/BIDS, model-provider, mechanistic-interpretability and quantum-resource patterns.
+
 ## QuantumBCI × neurOS
 
 QuantumBCI composes with [neurOS](https://github.com/sidhulyalkar/neurOS-v1) rather than rebuilding a
@@ -150,16 +201,21 @@ depends only on NumPy.
 ## Workbench commands
 
 ```text
-quantumbci init                 create quantumbci.json
-quantumbci doctor               show environment + optional integration readiness
-quantumbci smoke                run a complete synthetic mechanism sanity study
-quantumbci benchmark ...        evaluate user-supplied frozen .npy embeddings
-quantumbci experiments list     discover research manifests
-quantumbci experiments validate validate a scientific DAG contract
-quantumbci experiments plan     bind a manifest to a source revision
-quantumbci runs list            inspect local run history
-quantumbci runs show <RUN_ID>   inspect one run ledger
-quantumbci demo                 original compact mechanism demonstration
+quantumbci init                    create quantumbci.json
+quantumbci doctor                  show environment + optional integration readiness
+quantumbci smoke                   run a complete synthetic mechanism sanity study
+quantumbci benchmark ...           evaluate user-supplied frozen .npy embeddings
+quantumbci recipe init             create a portable study contract
+quantumbci recipe validate         preflight + fingerprint external study inputs
+quantumbci recipe run              execute a recipe into the RunStore
+quantumbci experiments list        discover research manifests
+quantumbci experiments validate    validate a scientific DAG contract
+quantumbci experiments plan        bind a manifest to a source revision
+quantumbci runs list               inspect local run history
+quantumbci runs show <RUN_ID>      inspect one run ledger
+quantumbci runs verify <RUN_ID>    verify the closed-world artifact checksum ledger
+quantumbci runs export <RUN_ID>    export RO-Crate or BIDS-aware evidence
+quantumbci demo                    original compact mechanism demonstration
 ```
 
 All important commands support machine-readable JSON output.
@@ -170,6 +226,8 @@ All important commands support machine-readable JSON output.
 quantumbci/
 ├── benchmarking.py       # explicit-split density/control benchmark API
 ├── workbench.py          # config, run registry, smoke study, HTML report
+├── recipes.py            # portable, content-addressed external-study contracts
+├── exporting.py          # integrity verification + RO-Crate/BIDS-aware evidence export
 ├── cli.py                # installed `quantumbci` command
 ├── claims.py             # claim classes + falsification contracts
 ├── spectral.py           # complex FFT + correct ideal-QFT measurement semantics
@@ -242,8 +300,8 @@ A result is interesting only if it survives three ledgers:
 A negative scientific finding is allowed to be a successful software run. Failing a promotion gate
 should make a downstream claim ineligible, not turn falsification into an infrastructure error.
 
-CI separately qualifies Python 3.10–3.12, the installed workbench console/smoke path, and the neurOS
-bridge against an exact pinned neurOS source revision.
+CI separately qualifies Python 3.10–3.12, the installed workbench/recipe/export console surfaces,
+wheel contents, and the neurOS bridge against an exact pinned neurOS source revision.
 
 ## Reading context
 
@@ -260,9 +318,10 @@ bridge against an exact pinned neurOS source revision.
 - **v0.2:** claim ledger + mechanism kernel + scientific semantics
 - **v0.3:** experiment manifests/orchestration + neurOS runtime/evidence integration
 - **v0.4:** usable local workbench + frozen-embedding benchmark + executable E001 foundation
-- **v0.5:** authoritative real E001 longitudinal benchmark + Lindblad-vs-LDS implementation
-- **v0.6:** preregistered contextual/order-effect experiment with classical adversaries
-- **v0.7:** quantum-hardware/resource sandbox only for hypotheses surviving the prior ladder
+- **v0.5:** portable study recipes + content-addressed identity + verifiable RO-Crate/BIDS-aware evidence
+- **v0.6:** authoritative real E001 longitudinal benchmark + SourceWeigher/mechanistic replication ladder
+- **v0.7:** Lindblad-vs-LDS implementation + preregistered contextual/order-effect expansion
+- **v0.8:** quantum-hardware/resource sandbox only for hypotheses surviving the prior ladder
 
 ## Legacy notebooks
 
