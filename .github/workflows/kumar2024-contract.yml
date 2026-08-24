@@ -1,0 +1,52 @@
+name: Kumar2024 study contract
+
+on:
+  pull_request:
+    paths:
+      - "quantumbci/studies/**"
+      - "scripts/evidence/run_kumar2024_e001.py"
+      - "tests/test_kumar2024_*.py"
+      - ".github/workflows/kumar2024-contract.yml"
+      - ".github/workflows/e001-kumar2024-study.yml"
+  push:
+    branches: [main]
+    paths:
+      - "quantumbci/studies/**"
+      - "scripts/evidence/run_kumar2024_e001.py"
+      - "tests/test_kumar2024_*.py"
+      - ".github/workflows/kumar2024-contract.yml"
+      - ".github/workflows/e001-kumar2024-study.yml"
+
+concurrency:
+  group: quantumbci-kumar-contract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-real-authority:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout QuantumBCI
+        uses: actions/checkout@v4
+      - name: Checkout merged neurOS authority
+        uses: actions/checkout@v4
+        with:
+          repository: sidhulyalkar/neurOS-v1
+          ref: ffa28ed552dc75158b673fdcd70729b1c9c69b47
+          path: _deps/neuros-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - name: Install merged neurOS contracts without MOABB data downloads
+        run: |
+          python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-models
+          python -m pip install -e _deps/neuros-v1/packages/neuros-foundation
+      - run: python -m pip install -e '.[dev]'
+      - name: Qualify raw fingerprint helpers and six-session neurOS study bundle
+        run: |
+          python -m pytest -q \
+            tests/test_kumar2024_study_helpers.py \
+            tests/test_kumar2024_neuros_study.py
+          python scripts/evidence/run_kumar2024_e001.py --help
