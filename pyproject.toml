@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantum-bci"
-version = "0.10.0"
+version = "0.11.0"
 description = "A falsifiable research workbench for quantum, quantum-inspired, and classical models of neural signals."
 readme = "README.md"
 requires-python = ">=3.10"
