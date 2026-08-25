@@ -1,0 +1,160 @@
+name: BMRB repeated-case reliability contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-bmrb-reliability-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify reliability, evidence-ladder and bundle kernels
+        run: |
+          python -m pytest -q \
+            tests/test_reliability.py \
+            tests/test_recapitulation.py \
+            tests/test_bmrb.py
+
+      - name: Qualify safe public BMRB surface
+        run: |
+          python - <<'PY'
+          import quantumbci
+          assert quantumbci.RELIABILITY_BOOTSTRAP_METHOD_ID == 'participant_primary_hierarchical_bootstrap_v1'
+          assert quantumbci.ICC_METHOD_ID == 'icc_a1_two_way_random_absolute_agreement_balanced_v1'
+          assert quantumbci.DEFAULT_RELIABILITY_SEED == 1501
+          assert quantumbci.DEFAULT_RELIABILITY_BOOTSTRAP_RESAMPLES == 5000
+          assert callable(quantumbci.audit_repeated_case_reliability)
+          assert callable(quantumbci.build_bmrb_dynamics_bundle)
+          assert callable(quantumbci.write_bmrb_dynamics_bundle)
+          signature = quantumbci.bmrb_dynamics_signature()
+          assert signature.id == 'BMRB_DYNAMICS_V1'
+          assert signature.inference_unit == 'participant'
+          PY
+
+      - name: Exercise installed BMRB CLI end to end
+        run: |
+          rm -rf /tmp/quantumbci-bmrb
+          mkdir -p /tmp/quantumbci-bmrb
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          root = Path('/tmp/quantumbci-bmrb')
+          cases = []
+          for participant in range(1, 4):
+              for occasion in range(1, 3):
+                  point = {
+                      'omega_x': 0.6 + 0.2 * participant + 0.01 * occasion,
+                      'omega_z': -0.4 - 0.1 * participant - 0.01 * occasion,
+                      'gamma_dephasing': 0.15 + 0.02 * participant,
+                      'gamma_relaxation': 0.24 + 0.02 * participant,
+                      'canonical_structure_residual': 0.08 + 0.01 * participant,
+                      'canonical_minus_affine_one_step_rmse': 0.03,
+                      'canonical_minus_affine_rollout_rmse': 0.05,
+                      'direct_minus_nonlinear_mean_nll': 0.02,
+                      'direct_minus_nonlinear_one_step_rmse': 0.01,
+                  }
+                  artifact = {
+                      'schema_version': 2,
+                      'experiment': 'E002',
+                      'claim_class': 'quantum_inspired',
+                      'artifact_role': 'bootstrap_stability_evidence',
+                      'status': 'pass',
+                      'evaluation_resampled': False,
+                      'single_case_bootstrap_is_icc': False,
+                      'participant_icc_computed': False,
+                      'stability_gate_defined': False,
+                      'stability_gate_pass': None,
+                      'predictive_adversary_ladder_complete': True,
+                      'dynamical_information_novel': False,
+                      'authority_fingerprint': f'authority-{participant}-{occasion}',
+                      'data_sha256': f'data-{participant}-{occasion}',
+                      'point_estimates': point,
+                  }
+                  filename = f'p{participant}-s{occasion}.json'
+                  (root / filename).write_text(json.dumps(artifact), encoding='utf-8')
+                  cases.append({
+                      'participant_id': f'p{participant}',
+                      'occasion_id': f'session-{occasion}',
+                      'case_id': f'p{participant}-session-{occasion}',
+                      'artifact': filename,
+                  })
+          (root / 'cases.json').write_text(json.dumps({
+              'schema_version': 1,
+              'study_id': 'ci-bmrb-v015',
+              'cases': cases,
+          }), encoding='utf-8')
+          PY
+          cd /tmp/quantumbci-bmrb
+          quantumbci-bmrb dynamics cases.json \
+            --resamples 100 \
+            --seed 1501 \
+            --output-dir report
+          python - <<'PY'
+          import json
+          payload = json.load(open('report/bmrb_dynamics.json'))
+          assert payload['artifact_role'] == 'bmrb_dynamics_bundle'
+          assert payload['benchmark'] == 'BMRB_DYNAMICS_V1'
+          assert payload['reliability']['participant_count'] == 3
+          profile = payload['mechanism_profile']
+          assert profile['evidence_coverage_tier'] == 'repeated_case'
+          assert profile['promotion_ceiling'] == 'descriptive'
+          assert profile['first_failing_gate'] == 'matched_classical_adversaries'
+          assert profile['necessity_claim_permitted'] is False
+          assert payload['claim_ceiling'] == 'quantum_inspired'
+          assert all(row['icc'] is not None for row in payload['reliability']['results'])
+          PY
+          test -s report/report.html
+
+      - name: Keep reliability and physical claim ceilings explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          reliability = Path('quantumbci/reliability.py').read_text(encoding='utf-8')
+          recapitulation = Path('quantumbci/recapitulation.py').read_text(encoding='utf-8')
+          bmrb = Path('quantumbci/bmrb.py').read_text(encoding='utf-8')
+          assert 'reliability_gate_defined' in reliability
+          assert 'reliability_gate_pass' in reliability
+          assert 'single_case_bootstrap_is_icc' in reliability
+          assert 'PHYSICAL_QUANTUM' in recapitulation
+          assert 'necessity_claim_permitted' in recapitulation
+          assert 'physical_quantum_witness' in bmrb
+          assert 'causal_intervention_and_ablation' in bmrb
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf /tmp/quantumbci-bmrb-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-bmrb-wheel
+          python - <<'PY'
+          from importlib.metadata import version
+          from pathlib import Path
+          import zipfile
+          wheels = list(Path('/tmp/quantumbci-bmrb-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          installed_version = version('quantum-bci')
+          assert f'quantum_bci-{installed_version}-' in wheels[0].name
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          expected = {
+              'quantumbci/reliability.py',
+              'quantumbci/recapitulation.py',
+              'quantumbci/bmrb.py',
+              'quantumbci/bmrb_cli.py',
+          }
+          missing = sorted(expected - names)
+          assert not missing, f'BMRB files missing from wheel: {missing}'
+          PY
