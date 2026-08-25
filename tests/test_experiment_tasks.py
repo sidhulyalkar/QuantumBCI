@@ -269,6 +269,8 @@ def test_e002_matched_fit_stage_reverifies_trajectory_authority(
             str(trajectory_index),
             "--output",
             str(matched),
+            "--ridge",
+            "0",
         ]
     ) == 0
     stdout = json.loads(capsys.readouterr().out)
@@ -278,6 +280,15 @@ def test_e002_matched_fit_stage_reverifies_trajectory_authority(
     assert artifact["same_evidence_verified"] is True
     assert artifact["calibration_used"] is False
     assert artifact["parameter_reduction"] == 8
+    assert artifact["authoritative_ridge"] == 0.0
+    assert artifact["regularization_geometry_matched"] is True
+    ranks = artifact["fit_rank_diagnostics"]
+    assert ranks["affine_predictor_design_rank"] == 4
+    assert ranks["affine_parameter_rank"] == 12
+    assert ranks["affine_parameter_count"] == 12
+    assert ranks["canonical_design_rank"] == 4
+    assert ranks["canonical_parameter_rank"] == 4
+    assert ranks["canonical_parameter_count"] == 4
     assert artifact["affine"]["authority_fingerprint"] == artifact["canonical"][
         "authority_fingerprint"
     ]
@@ -295,6 +306,45 @@ def test_e002_matched_fit_stage_reverifies_trajectory_authority(
     assert artifact["physical_quantum_promotion_eligible"] is False
     assert artifact["extended_classical_controls_required"] is True
     assert artifact["intervention_stage_eligible"] is False
+
+
+def test_e002_matched_fit_rejects_nonzero_authoritative_ridge(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    descriptor = _matched_trajectory_descriptor(tmp_path)
+    trajectory_index = tmp_path / "trajectory_index.json"
+    output = tmp_path / "must_not_exist.json"
+    assert main(
+        [
+            "trajectory-contract",
+            "E002",
+            "--input",
+            str(descriptor),
+            "--output",
+            str(trajectory_index),
+        ]
+    ) == 0
+    capsys.readouterr()
+
+    assert main(
+        [
+            "fit-matched-dynamics",
+            "E002",
+            "--input",
+            str(descriptor),
+            "--trajectory-index",
+            str(trajectory_index),
+            "--output",
+            str(output),
+            "--ridge",
+            "0.001",
+        ]
+    ) == 2
+    error = json.loads(capsys.readouterr().out)
+    assert error["status"] == "error"
+    assert "requires ridge=0" in error["message"]
+    assert not output.exists()
 
 
 def test_e002_matched_fit_rejects_tampered_trajectory_index(
