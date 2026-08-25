@@ -1,0 +1,229 @@
+name: E002 classical controls contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-e002-controls-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify discrete classical adversaries
+        run: |
+          python -m pytest -q tests/test_classical_dynamics.py tests/test_classical_controls_task.py
+
+      - name: Build canonical fixed-step evidence fixture
+        run: |
+          mkdir -p /tmp/e002-controls
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import numpy as np
+          from quantumbci.e002_synthetic import CanonicalQubitParameters, simulate_canonical_bloch_trajectories
+
+          root = Path('/tmp/e002-controls')
+          parameters = CanonicalQubitParameters(0.75, -0.55, 0.17, 0.26)
+          times = np.linspace(0.0, 0.8, 81)
+          initial = np.asarray([
+              [0.50, 0.00, 0.00],
+              [0.00, 0.50, 0.00],
+              [0.00, 0.00, 0.50],
+              [-0.30, 0.20, 0.10],
+              [0.25, -0.25, 0.15],
+              [-0.15, 0.30, -0.10],
+          ])
+          trajectories = simulate_canonical_bloch_trajectories(parameters, times, initial)
+          n_times = len(times)
+          states = trajectories.reshape(-1, 3)
+          ids = np.concatenate([np.repeat(f'trajectory-{i}', n_times) for i in range(len(initial))])
+          starts = np.tile(times, len(initial))
+          step = float(times[1] - times[0])
+          stops = starts + step / 2.0
+          np.save(root / 'states.npy', states)
+          np.save(root / 'ids.npy', ids)
+          np.save(root / 'starts.npy', starts)
+          np.save(root / 'stops.npy', stops)
+          fit_stop = 4 * n_times
+          descriptor = {
+              'schema_version': 1,
+              'dataset_id': 'ci-v010-canonical',
+              'case_id': 'ci-v010-case',
+              'latent_dimension': 3,
+              'time_step_policy': 'fixed',
+              'expected_window_seconds': step / 2.0,
+              'expected_step_seconds': step,
+              'step_tolerance_seconds': 1e-10,
+              'purge_seconds': 0.0,
+              'upstream_authority_fingerprint': 'neuros-ci-v010',
+              'source_revisions': {'quantumbci': 'ci-v010', 'encoder': 'frozen-ci'},
+              'data_metadata': {'state_surface': 'bloch_coordinates', 'fixture': 'canonical'},
+              'data': {
+                  'states': 'states.npy',
+                  'trajectory_ids': 'ids.npy',
+                  'start_times_s': 'starts.npy',
+                  'stop_times_s': 'stops.npy',
+              },
+              'split': {
+                  'fit_indices': list(range(fit_stop)),
+                  'calibration_indices': [],
+                  'evaluation_indices': list(range(fit_stop, len(states))),
+                  'representation_fit_indices': list(range(fit_stop)),
+              },
+          }
+          (root / 'trajectory_contract.json').write_text(json.dumps(descriptor, indent=2), encoding='utf-8')
+          PY
+
+      - name: Materialize v0.8 and v0.9 upstream evidence
+        run: |
+          cd /tmp/e002-controls
+          python -m quantumbci.experiments.tasks \
+            trajectory-contract E002 \
+            --input trajectory_contract.json \
+            --output trajectory_index.json \
+            > trajectory_stdout.json
+          python -m quantumbci.experiments.tasks \
+            fit-matched-dynamics E002 \
+            --input trajectory_contract.json \
+            --trajectory-index trajectory_index.json \
+            --output matched_dynamics.json \
+            --ridge 0 \
+            > matched_stdout.json
+
+      - name: Qualify installed v0.10 classical controls stage
+        run: |
+          cd /tmp/e002-controls
+          python -m quantumbci.experiments.classical_controls_task \
+            --descriptor trajectory_contract.json \
+            --trajectory-index trajectory_index.json \
+            --matched matched_dynamics.json \
+            --output classical_controls.json \
+            > controls_stdout.json
+          python - <<'PY'
+          import json
+          controls = json.load(open('classical_controls.json'))
+          matched = json.load(open('matched_dynamics.json'))
+          assert controls['status'] == 'pass'
+          assert controls['artifact_role'] == 'extended_classical_dynamics_controls'
+          assert controls['upstream_matched_baseline_verified'] is True
+          assert controls['calibration_used'] is False
+          assert set(controls['controls']) == {'persistence', 'diagonal_ar1', 'full_var1'}
+          assert controls['controls']['persistence']['parameter_count'] == 0
+          assert controls['controls']['diagonal_ar1']['parameter_count'] == 6
+          assert controls['controls']['full_var1']['parameter_count'] == 12
+          assert controls['controls']['full_var1']['effective_parameter_rank'] == 12
+          assert controls['best_one_step_model'] == 'full_var1_affine'
+          assert controls['best_rollout_model'] == 'full_var1_affine'
+          assert controls['controls']['full_var1']['evaluation_metrics']['one_step_rmse'] < 1e-9
+          assert controls['controls']['full_var1']['evaluation_metrics']['rollout_rmse'] < 1e-8
+          assert controls['comparisons_to_v0_9']['canonical_minus_full_var1_one_step_rmse'] > 0
+          assert controls['comparisons_to_v0_9']['canonical_minus_full_var1_rollout_rmse'] > 0
+          assert controls['linear_observed_control_stage_complete'] is True
+          assert controls['probabilistic_latent_state_space_control_required'] is True
+          assert controls['switching_state_control_required'] is True
+          assert controls['flexible_nonlinear_control_required_when_powered'] is True
+          assert controls['intervention_stage_eligible'] is False
+          assert controls['physical_quantum_promotion_eligible'] is False
+          notes = controls['equivalence_notes']
+          assert notes['aliases_count_as_one_model_class'] is True
+          assert notes['kalman_forecast_mean_distinct_under_current_contract'] is False
+          for field in ('authority_fingerprint', 'data_sha256', 'fit_transition_sha256', 'evaluation_transition_sha256'):
+              assert controls[field] == matched[field]
+              for lane in controls['controls'].values():
+                  assert lane[field] == matched[field]
+          assert '/tmp/' not in json.dumps(controls)
+          PY
+
+      - name: Reject tampered v0.9 evidence before control fitting
+        run: |
+          cd /tmp/e002-controls
+          cp matched_dynamics.json matched_tampered.json
+          python - <<'PY'
+          import json
+          path = 'matched_tampered.json'
+          payload = json.load(open(path))
+          payload['canonical']['data_sha256'] = '0' * 64
+          open(path, 'w').write(json.dumps(payload))
+          PY
+          rm -f should_not_exist.json
+          set +e
+          python -m quantumbci.experiments.classical_controls_task \
+            --descriptor trajectory_contract.json \
+            --trajectory-index trajectory_index.json \
+            --matched matched_tampered.json \
+            --output should_not_exist.json \
+            > tamper_stdout.json
+          code=$?
+          set -e
+          test "$code" -eq 2
+          test ! -f should_not_exist.json
+          python - <<'PY'
+          import json
+          payload = json.load(open('tamper_stdout.json'))
+          assert payload['status'] == 'error'
+          assert 'canonical.data_sha256' in payload['message']
+          PY
+
+      - name: Keep interventions and legacy unmatched routes fail-closed
+        run: |
+          set +e
+          python -m quantumbci.experiments.tasks dynamics-interventions E002 > /tmp/interventions.json
+          interventions_code=$?
+          python -m quantumbci.experiments.tasks fit-dynamics-controls E002 --input /tmp/e002-controls/matched_dynamics.json > /tmp/legacy-controls.json
+          legacy_code=$?
+          set -e
+          test "$interventions_code" -eq 3
+          test "$legacy_code" -eq 3
+          python - <<'PY'
+          import json
+          assert json.load(open('/tmp/interventions.json'))['status'] == 'not_implemented'
+          assert json.load(open('/tmp/legacy-controls.json'))['status'] == 'not_implemented'
+          PY
+
+      - name: Qualify manifest identity and wheel contents
+        run: |
+          quantumbci experiments validate E002_lindblad_dynamics --json
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          source = json.loads(Path('experiments/manifests/E002_lindblad_dynamics.json').read_text())
+          packaged = json.loads(Path('quantumbci/experiments/manifests/E002_lindblad_dynamics.json').read_text())
+          assert source == packaged
+          stages = {stage['id']: stage for stage in source['stages']}
+          control_stage = stages['fit_extended_classical_controls']
+          assert control_stage['depends_on'] == ['fit_matched_baseline']
+          assert 'quantumbci.experiments.classical_controls_task' in control_stage['command']
+          assert control_stage['produces'] == ['classical_controls.json']
+          assert stages['interventions']['depends_on'] == ['fit_matched_baseline', 'fit_extended_classical_controls']
+          PY
+          python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-controls-wheel
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          wheels = list(Path('/tmp/quantumbci-controls-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          assert '0.10.0' in wheels[0].name
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          expected = {
+              'quantumbci/classical_dynamics.py',
+              'quantumbci/experiments/classical_controls_task.py',
+              'quantumbci/dynamics_fitting.py',
+              'quantumbci/trajectory_authority.py',
+              'quantumbci/experiments/manifests/E002_lindblad_dynamics.json',
+          }
+          missing = sorted(expected - names)
+          assert not missing, f'classical control files missing from wheel: {missing}'
+          PY
