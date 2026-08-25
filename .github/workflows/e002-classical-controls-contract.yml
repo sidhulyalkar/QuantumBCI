@@ -205,6 +205,7 @@ jobs:
           control_stage = stages['fit_extended_classical_controls']
           probabilistic = stages['fit_probabilistic_state_space_control']
           switching = stages['fit_switching_state_control']
+          nonlinear = stages['fit_flexible_nonlinear_control']
           assert control_stage['depends_on'] == ['fit_matched_baseline']
           assert 'quantumbci.experiments.classical_controls_task' in control_stage['command']
           assert control_stage['produces'] == ['classical_controls.json']
@@ -213,11 +214,15 @@ jobs:
           assert switching['depends_on'] == ['fit_probabilistic_state_space_control']
           assert 'quantumbci.experiments.switching_state_task' in switching['command']
           assert switching['produces'] == ['switching_state.json']
+          assert nonlinear['depends_on'] == ['fit_switching_state_control']
+          assert 'quantumbci.experiments.nonlinear_control_task' in nonlinear['command']
+          assert nonlinear['produces'] == ['nonlinear_control.json']
           assert stages['interventions']['depends_on'] == [
               'fit_matched_baseline',
               'fit_extended_classical_controls',
               'fit_probabilistic_state_space_control',
               'fit_switching_state_control',
+              'fit_flexible_nonlinear_control',
           ]
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-controls-wheel
