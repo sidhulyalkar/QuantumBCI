@@ -195,9 +195,22 @@ def test_evaluation_corruption_changes_scores_but_not_source_parameter_bootstrap
     assert data.data_sha256 != corrupted_data.data_sha256
     for name in ("omega_x", "omega_z", "gamma_dephasing", "gamma_relaxation"):
         assert original.point_estimates[name] == pytest.approx(corrupted.point_estimates[name])
-        assert original.parameter_summaries[name].to_mapping() == pytest.approx(
-            corrupted.parameter_summaries[name].to_mapping()
-        )
+        left = original.parameter_summaries[name]
+        right = corrupted.parameter_summaries[name]
+        for field in (
+            "point_estimate",
+            "bootstrap_mean",
+            "bootstrap_median",
+            "bootstrap_std",
+            "ci_low",
+            "ci_high",
+            "finite_fraction",
+            "sign_consistency",
+            "positive_fraction",
+        ):
+            assert getattr(left, field) == pytest.approx(getattr(right, field))
+        assert left.relative_ci_width == pytest.approx(right.relative_ci_width)
+        assert left.zero_excluded == right.zero_excluded
     assert (
         original.predictive_summaries["direct_minus_nonlinear_mean_nll"].bootstrap_mean
         != pytest.approx(
