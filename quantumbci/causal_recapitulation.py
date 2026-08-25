@@ -8,8 +8,9 @@ single model. QuantumBCI combines three surfaces:
 3. matched-classical recovery after the candidate mechanism is ablated.
 
 neuros-mechint artifacts remain the authority for their own intervention policies.
-QuantumBCI consumes their versioned scientific payloads without requiring PyTorch at
-runtime, then adds BMRB-specific participant replication and promotion discipline.
+QuantumBCI verifies their versioned scientific fingerprints without requiring
+PyTorch at runtime, then adds BMRB-specific participant replication and promotion
+discipline.
 """
 
 from __future__ import annotations
@@ -21,6 +22,12 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
+from .neuros_mechint_artifacts import (
+    DOSE_RESPONSE_SCHEMA,
+    EVIDENCE_PACK_SCHEMA,
+    verify_dose_response_result,
+    verify_evidence_pack_result,
+)
 from .recapitulation import (
     EvidenceGate,
     EvidenceTier,
@@ -28,8 +35,8 @@ from .recapitulation import (
     MechanismNecessityProfile,
 )
 
-NEUROS_MECHINT_DOSE_RESPONSE_SCHEMA = "neuros-mechint.dose-response-study.v1"
-NEUROS_MECHINT_EVIDENCE_PACK_SCHEMA = "neuros-mechint.evidence-pack.v1"
+NEUROS_MECHINT_DOSE_RESPONSE_SCHEMA = DOSE_RESPONSE_SCHEMA
+NEUROS_MECHINT_EVIDENCE_PACK_SCHEMA = EVIDENCE_PACK_SCHEMA
 CAUSAL_EVIDENCE_METHOD_ID = "participant_balanced_causal_necessity_v1"
 
 
@@ -62,15 +69,6 @@ def _canonical_json(value: Any) -> str:
 
 def _fingerprint(domain: bytes, value: Any) -> str:
     return sha256(domain + _canonical_json(value).encode("utf-8")).hexdigest()
-
-
-def _unwrap_scientific_result(payload: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Accept a native scientific result or a neuros-mechint artifact envelope."""
-
-    result = payload.get("result")
-    if isinstance(result, Mapping):
-        return result
-    return payload
 
 
 @dataclass(frozen=True)
@@ -111,6 +109,24 @@ class MatchedClassicalRecovery:
             "source_fingerprint": self.source_fingerprint,
         }
 
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> "MatchedClassicalRecovery":
+        return cls(
+            classical_model_id=_required_text(
+                "matched_recovery.classical_model_id", payload.get("classical_model_id")
+            ),
+            classical_recovery_fraction=_finite(
+                "matched_recovery.classical_recovery_fraction",
+                payload.get("classical_recovery_fraction"),
+            ),
+            information_set_id=_required_text(
+                "matched_recovery.information_set_id", payload.get("information_set_id")
+            ),
+            source_fingerprint=_required_text(
+                "matched_recovery.source_fingerprint", payload.get("source_fingerprint")
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class CausalCaseEvidence:
@@ -143,7 +159,9 @@ class CausalCaseEvidence:
         ):
             _required_text(name, getattr(self, name))
         object.__setattr__(
-            self, "oriented_endpoint_effect", _finite("oriented_endpoint_effect", self.oriented_endpoint_effect)
+            self,
+            "oriented_endpoint_effect",
+            _finite("oriented_endpoint_effect", self.oriented_endpoint_effect),
         )
         object.__setattr__(
             self,
@@ -151,18 +169,26 @@ class CausalCaseEvidence:
             _fraction("mean_monotonic_fraction", self.mean_monotonic_fraction),
         )
         object.__setattr__(
-            self, "sufficiency_fraction", _finite("sufficiency_fraction", self.sufficiency_fraction)
+            self,
+            "sufficiency_fraction",
+            _finite("sufficiency_fraction", self.sufficiency_fraction),
         )
         object.__setattr__(
-            self, "necessity_fraction", _finite("necessity_fraction", self.necessity_fraction)
+            self,
+            "necessity_fraction",
+            _finite("necessity_fraction", self.necessity_fraction),
         )
         object.__setattr__(
             self,
             "joint_random_percentile",
             _fraction("joint_random_percentile", self.joint_random_percentile),
         )
-        if len(self.source_schemas) != 2 or not all(str(item).strip() for item in self.source_schemas):
-            raise ValueError("source_schemas must contain dose-response and faithfulness schemas")
+        if len(self.source_schemas) != 2 or not all(
+            str(item).strip() for item in self.source_schemas
+        ):
+            raise ValueError(
+                "source_schemas must contain dose-response and faithfulness schemas"
+            )
 
     @property
     def direction_matched(self) -> bool:
@@ -252,15 +278,47 @@ class CausalNecessityPolicy:
             "preregistered": bool(self.preregistered),
             "min_participants": int(self.min_participants),
             "min_direction_match_fraction": float(self.min_direction_match_fraction),
-            "min_dose_response_pass_fraction": float(self.min_dose_response_pass_fraction),
-            "min_faithfulness_pass_fraction": float(self.min_faithfulness_pass_fraction),
+            "min_dose_response_pass_fraction": float(
+                self.min_dose_response_pass_fraction
+            ),
+            "min_faithfulness_pass_fraction": float(
+                self.min_faithfulness_pass_fraction
+            ),
             "min_mean_necessity_fraction": float(self.min_mean_necessity_fraction),
-            "min_mean_joint_random_percentile": float(self.min_mean_joint_random_percentile),
+            "min_mean_joint_random_percentile": float(
+                self.min_mean_joint_random_percentile
+            ),
             "max_mean_classical_recovery_fraction": float(
                 self.max_mean_classical_recovery_fraction
             ),
             "decision_rule": self.decision_rule,
         }
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> "CausalNecessityPolicy":
+        return cls(
+            policy_id=_required_text("policy.policy_id", payload.get("policy_id")),
+            preregistered=bool(payload.get("preregistered", False)),
+            min_participants=int(payload.get("min_participants", 3)),
+            min_direction_match_fraction=float(
+                payload.get("min_direction_match_fraction", 0.80)
+            ),
+            min_dose_response_pass_fraction=float(
+                payload.get("min_dose_response_pass_fraction", 0.80)
+            ),
+            min_faithfulness_pass_fraction=float(
+                payload.get("min_faithfulness_pass_fraction", 0.80)
+            ),
+            min_mean_necessity_fraction=float(
+                payload.get("min_mean_necessity_fraction", 0.50)
+            ),
+            min_mean_joint_random_percentile=float(
+                payload.get("min_mean_joint_random_percentile", 0.95)
+            ),
+            max_mean_classical_recovery_fraction=float(
+                payload.get("max_mean_classical_recovery_fraction", 0.25)
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -289,7 +347,9 @@ class ParticipantCausalSummary:
             "mean_sufficiency_fraction": float(self.mean_sufficiency_fraction),
             "mean_necessity_fraction": float(self.mean_necessity_fraction),
             "mean_joint_random_percentile": float(self.mean_joint_random_percentile),
-            "mean_classical_recovery_fraction": float(self.mean_classical_recovery_fraction),
+            "mean_classical_recovery_fraction": float(
+                self.mean_classical_recovery_fraction
+            ),
         }
 
 
@@ -331,7 +391,9 @@ class CausalNecessityResult:
             "mean_oriented_endpoint_effect": float(self.mean_oriented_endpoint_effect),
             "mean_necessity_fraction": float(self.mean_necessity_fraction),
             "mean_joint_random_percentile": float(self.mean_joint_random_percentile),
-            "mean_classical_recovery_fraction": float(self.mean_classical_recovery_fraction),
+            "mean_classical_recovery_fraction": float(
+                self.mean_classical_recovery_fraction
+            ),
             "scientific_criteria_passed": bool(self.scientific_criteria_passed),
             "promotion_eligible": bool(self.promotion_eligible),
             "reasons": list(self.reasons),
@@ -358,46 +420,39 @@ def causal_case_from_neuros_mechint(
     faithfulness: Mapping[str, Any],
     matched_recovery: MatchedClassicalRecovery,
 ) -> CausalCaseEvidence:
-    """Adapt versioned neuros-mechint scientific results into one BMRB case."""
+    """Adapt fingerprint-verified neuros-mechint scientific results into one BMRB case."""
 
-    dose = _unwrap_scientific_result(dose_response)
-    dose_schema = str(dose.get("schema_version", ""))
-    if dose_schema != NEUROS_MECHINT_DOSE_RESPONSE_SCHEMA:
-        raise ValueError(
-            "unsupported neuros-mechint dose-response schema: "
-            f"{dose_schema!r}"
-        )
+    dose = verify_dose_response_result(dose_response)
     dose_spec = dose.get("spec")
     if not isinstance(dose_spec, Mapping):
         raise ValueError("dose-response result is missing spec")
-    intervention_id = _required_text("intervention_id", dose_spec.get("intervention_id"))
+    intervention_id = _required_text(
+        "intervention_id", dose_spec.get("intervention_id")
+    )
     expected_direction = int(dose_spec.get("expected_direction", 0))
     if expected_direction not in {-1, 1}:
         raise ValueError("dose-response expected_direction must be -1 or 1")
     endpoint_effect = _finite("endpoint_effect", dose.get("endpoint_effect"))
     # neuros-mechint serializes endpoint_effect already oriented by expected_direction.
-    monotonic = _fraction("mean_monotonic_fraction", dose.get("mean_monotonic_fraction"))
+    monotonic = _fraction(
+        "mean_monotonic_fraction", dose.get("mean_monotonic_fraction")
+    )
     dose_fp = _required_text(
-        "dose study_fingerprint", dose.get("study_fingerprint", _fingerprint(b"qbc.dose\0", dose))
+        "dose study_fingerprint", dose.get("study_fingerprint")
     )
 
-    pack = _unwrap_scientific_result(faithfulness)
-    pack_schema = str(pack.get("schema_version", ""))
-    if pack_schema != NEUROS_MECHINT_EVIDENCE_PACK_SCHEMA:
-        raise ValueError(
-            "unsupported neuros-mechint evidence-pack schema: "
-            f"{pack_schema!r}"
-        )
+    pack = verify_evidence_pack_result(faithfulness)
     validation = pack.get("validation_aggregate")
     promotion = pack.get("promotion")
     if not isinstance(validation, Mapping) or not isinstance(promotion, Mapping):
         raise ValueError("evidence pack is missing validation_aggregate or promotion")
     joint_random = validation.get("mean_joint_random_percentile")
     if joint_random is None:
-        raise ValueError("evidence pack validation joint random percentile is unavailable")
+        raise ValueError(
+            "evidence pack validation joint random percentile is unavailable"
+        )
     pack_fp = _required_text(
-        "faithfulness study_fingerprint",
-        pack.get("study_fingerprint", _fingerprint(b"qbc.faithfulness\0", pack)),
+        "faithfulness study_fingerprint", pack.get("study_fingerprint")
     )
 
     return CausalCaseEvidence(
@@ -422,7 +477,7 @@ def causal_case_from_neuros_mechint(
         matched_recovery=matched_recovery,
         dose_source_fingerprint=dose_fp,
         faithfulness_source_fingerprint=pack_fp,
-        source_schemas=(dose_schema, pack_schema),
+        source_schemas=(DOSE_RESPONSE_SCHEMA, EVIDENCE_PACK_SCHEMA),
     )
 
 
@@ -432,20 +487,43 @@ def _participant_summary(
 ) -> ParticipantCausalSummary:
     if not cases:
         raise ValueError("participant causal summary requires cases")
-    values = lambda fn: np.asarray([fn(case) for case in cases], dtype=float)
+
+    def values(fn: Any) -> np.ndarray:
+        return np.asarray([fn(case) for case in cases], dtype=float)
+
     return ParticipantCausalSummary(
         participant_id=participant_id,
         case_count=len(cases),
-        direction_match_fraction=float(np.mean(values(lambda case: case.direction_matched))),
-        dose_response_pass_fraction=float(np.mean(values(lambda case: case.dose_response_passed))),
-        faithfulness_pass_fraction=float(np.mean(values(lambda case: case.faithfulness_passed))),
-        mean_oriented_endpoint_effect=float(np.mean(values(lambda case: case.oriented_endpoint_effect))),
-        mean_monotonic_fraction=float(np.mean(values(lambda case: case.mean_monotonic_fraction))),
-        mean_sufficiency_fraction=float(np.mean(values(lambda case: case.sufficiency_fraction))),
-        mean_necessity_fraction=float(np.mean(values(lambda case: case.necessity_fraction))),
-        mean_joint_random_percentile=float(np.mean(values(lambda case: case.joint_random_percentile))),
+        direction_match_fraction=float(
+            np.mean(values(lambda case: case.direction_matched))
+        ),
+        dose_response_pass_fraction=float(
+            np.mean(values(lambda case: case.dose_response_passed))
+        ),
+        faithfulness_pass_fraction=float(
+            np.mean(values(lambda case: case.faithfulness_passed))
+        ),
+        mean_oriented_endpoint_effect=float(
+            np.mean(values(lambda case: case.oriented_endpoint_effect))
+        ),
+        mean_monotonic_fraction=float(
+            np.mean(values(lambda case: case.mean_monotonic_fraction))
+        ),
+        mean_sufficiency_fraction=float(
+            np.mean(values(lambda case: case.sufficiency_fraction))
+        ),
+        mean_necessity_fraction=float(
+            np.mean(values(lambda case: case.necessity_fraction))
+        ),
+        mean_joint_random_percentile=float(
+            np.mean(values(lambda case: case.joint_random_percentile))
+        ),
         mean_classical_recovery_fraction=float(
-            np.mean(values(lambda case: case.matched_recovery.classical_recovery_fraction))
+            np.mean(
+                values(
+                    lambda case: case.matched_recovery.classical_recovery_fraction
+                )
+            )
         ),
     )
 
@@ -531,7 +609,11 @@ def evaluate_causal_necessity(
             case.to_mapping()
             for case in sorted(
                 materialized,
-                key=lambda item: (item.participant_id, item.occasion_id, item.case_id),
+                key=lambda item: (
+                    item.participant_id,
+                    item.occasion_id,
+                    item.case_id,
+                ),
             )
         ],
     }
@@ -550,7 +632,9 @@ def evaluate_causal_necessity(
         mean_classical_recovery_fraction=recovery,
         scientific_criteria_passed=not reasons,
         reasons=tuple(reasons),
-        source_fingerprint=_fingerprint(b"quantumbci.causal-necessity.v1\0", source_payload),
+        source_fingerprint=_fingerprint(
+            b"quantumbci.causal-necessity.v1\0", source_payload
+        ),
     )
 
 
@@ -570,7 +654,8 @@ def attach_causal_evidence(
         raise ValueError("causal result mechanism_id does not match BMRB profile")
     upstream_ceiling = profile.promotion_ceiling
     upstream_ready = (
-        upstream_ceiling is not None and upstream_ceiling >= EvidenceTier.REPEATED_CASE
+        upstream_ceiling is not None
+        and upstream_ceiling >= EvidenceTier.REPEATED_CASE
     )
     if not result.scientific_criteria_passed:
         status = GateStatus.FAIL
