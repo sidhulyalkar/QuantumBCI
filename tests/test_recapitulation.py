@@ -63,8 +63,8 @@ def test_pass_requires_explicit_decision_rule() -> None:
         )
 
 
-def test_later_pass_cannot_jump_over_unresolved_tier() -> None:
-    gates = (
+def _nonmonotonic_gates() -> tuple[EvidenceGate, ...]:
+    return (
         EvidenceGate(
             id="descriptive",
             tier=EvidenceTier.DESCRIPTIVE,
@@ -86,8 +86,21 @@ def test_later_pass_cannot_jump_over_unresolved_tier() -> None:
             threshold="predeclared comparison margin",
         ),
     )
+
+
+def test_later_pass_cannot_jump_over_unresolved_tier() -> None:
     with pytest.raises(ValueError, match="passes after an earlier tier blocked"):
-        validate_monotonic_promotion(gates)
+        validate_monotonic_promotion(_nonmonotonic_gates())
+
+
+def test_profile_constructor_enforces_monotonic_promotion() -> None:
+    with pytest.raises(ValueError, match="passes after an earlier tier blocked"):
+        MechanismNecessityProfile(
+            mechanism_id="lindblad_latent_dynamics",
+            claim_class=ClaimClass.QUANTUM_INSPIRED,
+            signature=bmrb_dynamics_signature(),
+            gates=_nonmonotonic_gates(),
+        )
 
 
 def test_quantum_inspired_profile_cannot_claim_physical_quantum_evidence() -> None:
