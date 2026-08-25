@@ -1,10 +1,14 @@
 """Leakage-resistant authority for continuous latent trajectory experiments.
 
-The longitudinal neurOS authority freezes *which samples* belong to source,
+The neurOS longitudinal authority freezes *which neural samples* belong to source,
 calibration, and final evaluation. Dynamics experiments additionally need to freeze
-*temporal adjacency*: trajectory identity, timestamps, window overlap, legal
-transitions, representation-fit scope, and purge gaps. This module supplies that
-second authority without duplicating the upstream neural-data stack.
+*temporal adjacency*: trajectory identity, exact window geometry, legal transitions,
+representation-fit scope, and purge gaps. This module supplies that second authority
+without cloning the upstream neural-data stack.
+
+v1 is deliberately conservative: it supports fixed-duration, fixed-stride windows
+only. Irregular trajectories need an explicit maximum-gap/missingness contract and
+remain unsupported rather than being silently approximated.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import numpy as np
 
 Array = np.ndarray
 TrajectoryRole = Literal["fit", "calibration", "evaluation"]
-TimeStepPolicy = Literal["fixed", "native_irregular"]
+TimeStepPolicy = Literal["fixed"]
 MissingDataPolicy = Literal["reject"]
 
 
@@ -37,7 +41,9 @@ def _indices(values: Any, *, name: str) -> tuple[int, ...]:
         raise ValueError(f"{name} contains duplicate indices")
     if any(value < 0 for value in result):
         raise ValueError(f"{name} contains negative indices")
-    return result
+    # These are evidence sets, not caller-ordered sequences. Canonical sorting keeps
+    # scientific identity invariant to incidental JSON/list ordering.
+    return tuple(sorted(result))
 
 
 def _sha256_array(digest: Any, array: Array) -> None:
@@ -76,8 +82,7 @@ class TrajectoryEvidenceData:
         if not np.all(np.isfinite(states)):
             raise ValueError("states contain non-finite values")
 
-        trajectory_ids = np.asarray(self.trajectory_ids).astype(str).reshape(-1)
-        trajectory_ids = _readonly_array(trajectory_ids)
+        trajectory_ids = _readonly_array(np.asarray(self.trajectory_ids).astype(str).reshape(-1))
         starts = _readonly_array(self.start_times_s, dtype=float).reshape(-1)
         stops = _readonly_array(self.stop_times_s, dtype=float).reshape(-1)
         n = states.shape[0]
@@ -114,13 +119,13 @@ class TrajectoryEvidenceData:
 
     @property
     def data_sha256(self) -> str:
+        """Hash exact state bytes plus row-level temporal identity and metadata."""
+
         digest = hashlib.sha256()
         digest.update(b"quantumbci.trajectory-evidence-data.v1\0")
         digest.update(self.dataset_id.encode("utf-8"))
         digest.update(b"\0")
         _sha256_array(digest, self.states)
-        # Strings are serialized canonically instead of relying on platform-specific
-        # NumPy unicode byte widths.
         identity = {
             "trajectory_ids": self.trajectory_ids.astype(str).tolist(),
             "start_times_s": [float(v) for v in self.start_times_s.tolist()],
@@ -128,8 +133,22 @@ class TrajectoryEvidenceData:
             "valid_mask": [bool(v) for v in self.valid_mask.tolist()],
             "metadata": dict(self.metadata),
         }
-        digest.update(json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8"))
+        digest.update(
+            json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        )
         return digest.hexdigest()
+
+
+def _by_trajectory(
+    data: TrajectoryEvidenceData,
+    indices: tuple[int, ...],
+) -> dict[str, list[int]]:
+    grouped: dict[str, list[int]] = {}
+    for index in indices:
+        grouped.setdefault(str(data.trajectory_ids[index]), []).append(index)
+    for values in grouped.values():
+        values.sort(key=lambda i: float(data.start_times_s[i]))
+    return grouped
 
 
 def _minimum_interval_separation(
@@ -137,19 +156,18 @@ def _minimum_interval_separation(
     left_indices: tuple[int, ...],
     right_indices: tuple[int, ...],
 ) -> float:
-    """Return minimum temporal edge-to-edge separation for same-trajectory windows."""
+    """Return minimum edge-to-edge separation for same-trajectory cross-role windows.
+
+    Negative values indicate temporal overlap. ``inf`` means the roles occur in
+    disjoint trajectory IDs and therefore cannot leak through window overlap.
+    """
 
     minimum = float("inf")
-    left_by_trajectory: dict[str, list[int]] = {}
-    right_by_trajectory: dict[str, list[int]] = {}
-    for index in left_indices:
-        left_by_trajectory.setdefault(str(data.trajectory_ids[index]), []).append(index)
-    for index in right_indices:
-        right_by_trajectory.setdefault(str(data.trajectory_ids[index]), []).append(index)
-
-    for trajectory_id in set(left_by_trajectory) & set(right_by_trajectory):
-        left = sorted(left_by_trajectory[trajectory_id], key=lambda i: float(data.start_times_s[i]))
-        right = sorted(right_by_trajectory[trajectory_id], key=lambda i: float(data.start_times_s[i]))
+    left_by = _by_trajectory(data, left_indices)
+    right_by = _by_trajectory(data, right_indices)
+    for trajectory_id in set(left_by) & set(right_by):
+        left = left_by[trajectory_id]
+        right = right_by[trajectory_id]
         i = j = 0
         while i < len(left) and j < len(right):
             a = left[i]
@@ -157,20 +175,20 @@ def _minimum_interval_separation(
             a_start, a_stop = float(data.start_times_s[a]), float(data.stop_times_s[a])
             b_start, b_stop = float(data.start_times_s[b]), float(data.stop_times_s[b])
             if a_stop <= b_start:
-                separation = b_start - a_stop
+                minimum = min(minimum, b_start - a_stop)
                 i += 1
             elif b_stop <= a_start:
-                separation = a_start - b_stop
+                minimum = min(minimum, a_start - b_stop)
                 j += 1
             else:
-                return -min(a_stop, b_stop) + max(a_start, b_start)
-            minimum = min(minimum, separation)
+                # Magnitude is overlap duration; only the sign is needed by the gate.
+                return -(min(a_stop, b_stop) - max(a_start, b_start))
     return minimum
 
 
 @dataclass(frozen=True, slots=True)
 class TrajectoryEvidenceAuthority:
-    """Frozen chronology and split authority for one continuous-dynamics evidence case."""
+    """Frozen chronology and evidence split for one continuous-dynamics case."""
 
     dataset_id: str
     case_id: str
@@ -183,7 +201,8 @@ class TrajectoryEvidenceAuthority:
     representation_fit_indices: tuple[int, ...]
     latent_dimension: int
     time_step_policy: TimeStepPolicy
-    expected_step_seconds: float | None
+    expected_window_seconds: float
+    expected_step_seconds: float
     step_tolerance_seconds: float
     purge_seconds: float
     missing_data_policy: MissingDataPolicy = "reject"
@@ -201,33 +220,32 @@ class TrajectoryEvidenceAuthority:
             raise ValueError("n_windows/state_dimension must be positive")
         if self.latent_dimension != self.state_dimension:
             raise ValueError("latent_dimension must equal the frozen state tensor dimension")
-        if self.time_step_policy not in {"fixed", "native_irregular"}:
-            raise ValueError("unsupported time_step_policy")
+        if self.time_step_policy != "fixed":
+            raise ValueError("v1 trajectory authority supports time_step_policy='fixed' only")
         if self.missing_data_policy != "reject":
             raise ValueError("v1 trajectory authority supports missing_data_policy='reject' only")
+        if self.expected_window_seconds <= 0 or self.expected_step_seconds <= 0:
+            raise ValueError("expected window and step durations must be positive")
         if self.step_tolerance_seconds < 0 or self.purge_seconds < 0:
-            raise ValueError("time tolerances and purge_seconds must be non-negative")
-        if self.time_step_policy == "fixed":
-            if self.expected_step_seconds is None or self.expected_step_seconds <= 0:
-                raise ValueError("fixed-step authority requires expected_step_seconds > 0")
-        elif self.expected_step_seconds is not None:
-            raise ValueError("native_irregular authority must not declare expected_step_seconds")
+            raise ValueError("time tolerance and purge_seconds must be non-negative")
 
         fit = _indices(self.fit_indices, name="fit_indices")
         calibration = _indices(self.calibration_indices, name="calibration_indices")
         evaluation = _indices(self.evaluation_indices, name="evaluation_indices")
-        representation = _indices(self.representation_fit_indices, name="representation_fit_indices")
+        representation = _indices(
+            self.representation_fit_indices,
+            name="representation_fit_indices",
+        )
         if not fit or not evaluation:
             raise ValueError("fit_indices and evaluation_indices must be non-empty")
         if not representation:
             raise ValueError("representation_fit_indices must be non-empty")
-        sets = [set(fit), set(calibration), set(evaluation)]
-        if sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2]:
+        fit_set, calibration_set, evaluation_set = set(fit), set(calibration), set(evaluation)
+        if fit_set & calibration_set or fit_set & evaluation_set or calibration_set & evaluation_set:
             raise ValueError("fit/calibration/evaluation indices must be mutually disjoint")
-        if not set(representation).issubset(set(fit)):
+        if not set(representation).issubset(fit_set):
             raise ValueError("representation_fit_indices must be a subset of fit_indices")
-        all_indices = fit + calibration + evaluation + representation
-        if any(index >= self.n_windows for index in all_indices):
+        if any(index >= self.n_windows for index in fit + calibration + evaluation + representation):
             raise ValueError("authority contains out-of-range indices")
 
         object.__setattr__(self, "fit_indices", fit)
@@ -248,8 +266,9 @@ class TrajectoryEvidenceAuthority:
         evaluation_indices: Any,
         representation_fit_indices: Any,
         latent_dimension: int,
+        expected_window_seconds: float,
+        expected_step_seconds: float,
         time_step_policy: TimeStepPolicy = "fixed",
-        expected_step_seconds: float | None = None,
         step_tolerance_seconds: float = 1e-6,
         purge_seconds: float = 0.0,
         upstream_authority_fingerprint: str | None = None,
@@ -265,10 +284,14 @@ class TrajectoryEvidenceAuthority:
             fit_indices=_indices(fit_indices, name="fit_indices"),
             calibration_indices=_indices(calibration_indices, name="calibration_indices"),
             evaluation_indices=_indices(evaluation_indices, name="evaluation_indices"),
-            representation_fit_indices=_indices(representation_fit_indices, name="representation_fit_indices"),
+            representation_fit_indices=_indices(
+                representation_fit_indices,
+                name="representation_fit_indices",
+            ),
             latent_dimension=int(latent_dimension),
             time_step_policy=time_step_policy,
-            expected_step_seconds=None if expected_step_seconds is None else float(expected_step_seconds),
+            expected_window_seconds=float(expected_window_seconds),
+            expected_step_seconds=float(expected_step_seconds),
             step_tolerance_seconds=float(step_tolerance_seconds),
             purge_seconds=float(purge_seconds),
             upstream_authority_fingerprint=upstream_authority_fingerprint,
@@ -287,26 +310,6 @@ class TrajectoryEvidenceAuthority:
             return self.evaluation_indices
         raise ValueError(f"unsupported role={role!r}")
 
-    def transition_pairs(self, data: TrajectoryEvidenceData, role: TrajectoryRole) -> Array:
-        """Return only legal adjacent transitions entirely inside one evidence role."""
-
-        self._validate_data_identity(data)
-        indices = self._role_indices(role)
-        by_trajectory: dict[str, list[int]] = {}
-        for index in indices:
-            by_trajectory.setdefault(str(data.trajectory_ids[index]), []).append(index)
-        pairs: list[tuple[int, int]] = []
-        for values in by_trajectory.values():
-            ordered = sorted(values, key=lambda i: float(data.start_times_s[i]))
-            for left, right in zip(ordered[:-1], ordered[1:]):
-                delta = float(data.start_times_s[right] - data.start_times_s[left])
-                if self.time_step_policy == "fixed":
-                    assert self.expected_step_seconds is not None
-                    if abs(delta - self.expected_step_seconds) > self.step_tolerance_seconds:
-                        continue
-                pairs.append((left, right))
-        return np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
-
     def _validate_data_identity(self, data: TrajectoryEvidenceData) -> None:
         if data.dataset_id != self.dataset_id:
             raise ValueError("trajectory dataset_id differs from authority")
@@ -315,21 +318,42 @@ class TrajectoryEvidenceAuthority:
         if data.data_sha256 != self.data_sha256:
             raise ValueError("trajectory evidence data SHA-256 differs from authority")
 
+    def transition_pairs(self, data: TrajectoryEvidenceData, role: TrajectoryRole) -> Array:
+        """Return legal adjacent transitions entirely inside one evidence role.
+
+        A gap larger than the declared stride breaks a trajectory block. A pair is
+        exposed only when its start-time delta matches the declared stride.
+        """
+
+        self._validate_data_identity(data)
+        pairs: list[tuple[int, int]] = []
+        for values in _by_trajectory(data, self._role_indices(role)).values():
+            for left, right in zip(values[:-1], values[1:]):
+                delta = float(data.start_times_s[right] - data.start_times_s[left])
+                if abs(delta - self.expected_step_seconds) <= self.step_tolerance_seconds:
+                    pairs.append((left, right))
+        return np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
+
     def restore(self, data: TrajectoryEvidenceData) -> "TrajectoryEvidenceAuthority":
-        """Revalidate exact tensor identity, chronology, purge gaps, and legal transitions."""
+        """Revalidate exact tensor identity, chronology, window geometry, and purge gaps."""
 
         self._validate_data_identity(data)
         selected = self.fit_indices + self.calibration_indices + self.evaluation_indices
         if any(not bool(data.valid_mask[index]) for index in selected):
             raise ValueError("authority includes invalid/missing trajectory windows")
 
-        # Each trajectory must be temporally unique and monotonic when sorted. Duplicate
-        # starts are ambiguous because they create multiple possible adjacency graphs.
-        for trajectory_id in sorted(set(data.trajectory_ids.astype(str).tolist())):
-            indices = np.flatnonzero(data.trajectory_ids.astype(str) == trajectory_id)
+        # Duplicate starts make adjacency ambiguous even if the duplicate rows were
+        # assigned to different evidence roles.
+        ids = data.trajectory_ids.astype(str)
+        for trajectory_id in sorted(set(ids.tolist())):
+            indices = np.flatnonzero(ids == trajectory_id)
             starts = np.sort(data.start_times_s[indices])
             if len(starts) > 1 and np.any(np.diff(starts) <= 0):
                 raise ValueError(f"trajectory {trajectory_id!r} has duplicate/non-increasing starts")
+
+        durations = data.stop_times_s[np.asarray(selected)] - data.start_times_s[np.asarray(selected)]
+        if np.any(np.abs(durations - self.expected_window_seconds) > self.step_tolerance_seconds):
+            raise ValueError("selected windows violate expected_window_seconds")
 
         roles = {
             "fit": self.fit_indices,
@@ -339,8 +363,7 @@ class TrajectoryEvidenceAuthority:
         role_names = tuple(roles)
         for i, left_name in enumerate(role_names):
             for right_name in role_names[i + 1 :]:
-                left = roles[left_name]
-                right = roles[right_name]
+                left, right = roles[left_name], roles[right_name]
                 if not left or not right:
                     continue
                 separation = _minimum_interval_separation(data, left, right)
@@ -350,17 +373,18 @@ class TrajectoryEvidenceAuthority:
                         f"minimum separation={separation:.9g}s < purge={self.purge_seconds:.9g}s"
                     )
 
-        if self.time_step_policy == "fixed":
-            assert self.expected_step_seconds is not None
-            # A role may contain multiple disjoint blocks. We require every legal transition
-            # exposed by the authority to have exactly the declared step within tolerance;
-            # larger gaps simply break the transition graph.
-            for role in ("fit", "calibration", "evaluation"):
-                pairs = self.transition_pairs(data, role)  # type: ignore[arg-type]
-                for left, right in pairs.tolist():
+        # Gaps larger than the declared stride are legitimate block boundaries. Gaps
+        # *smaller* than the stride reveal a denser/overlapping temporal lattice than
+        # the contract claims and therefore fail closed.
+        for role, indices in roles.items():
+            for values in _by_trajectory(data, indices).values():
+                for left, right in zip(values[:-1], values[1:]):
                     delta = float(data.start_times_s[right] - data.start_times_s[left])
-                    if abs(delta - self.expected_step_seconds) > self.step_tolerance_seconds:
-                        raise ValueError("fixed-step transition violates expected_step_seconds")
+                    if delta < self.expected_step_seconds - self.step_tolerance_seconds:
+                        raise ValueError(
+                            f"{role} trajectory contains start-time delta {delta:.9g}s "
+                            f"smaller than declared step {self.expected_step_seconds:.9g}s"
+                        )
 
         if len(self.transition_pairs(data, "fit")) == 0:
             raise ValueError("fit authority contains no legal within-trajectory transitions")
@@ -393,6 +417,7 @@ class TrajectoryEvidenceAuthority:
             "evaluation_indices": list(self.evaluation_indices),
             "representation_fit_indices": list(self.representation_fit_indices),
             "time_step_policy": self.time_step_policy,
+            "expected_window_seconds": self.expected_window_seconds,
             "expected_step_seconds": self.expected_step_seconds,
             "step_tolerance_seconds": self.step_tolerance_seconds,
             "purge_seconds": self.purge_seconds,
@@ -424,15 +449,16 @@ class TrajectoryEvidenceAuthority:
             evaluation_indices=tuple(int(v) for v in payload["evaluation_indices"]),
             representation_fit_indices=tuple(int(v) for v in payload["representation_fit_indices"]),
             latent_dimension=int(payload["latent_dimension"]),
-            time_step_policy=str(payload["time_step_policy"]),  # type: ignore[arg-type]
-            expected_step_seconds=(
-                None if payload.get("expected_step_seconds") is None else float(payload["expected_step_seconds"])
-            ),
+            time_step_policy=str(payload.get("time_step_policy", "fixed")),  # type: ignore[arg-type]
+            expected_window_seconds=float(payload["expected_window_seconds"]),
+            expected_step_seconds=float(payload["expected_step_seconds"]),
             step_tolerance_seconds=float(payload.get("step_tolerance_seconds", 1e-6)),
             purge_seconds=float(payload.get("purge_seconds", 0.0)),
             missing_data_policy=str(payload.get("missing_data_policy", "reject")),  # type: ignore[arg-type]
             upstream_authority_fingerprint=(
-                None if payload.get("upstream_authority_fingerprint") is None else str(payload["upstream_authority_fingerprint"])
+                None
+                if payload.get("upstream_authority_fingerprint") is None
+                else str(payload["upstream_authority_fingerprint"])
             ),
             source_revisions=dict(payload.get("source_revisions", {})),
             case_metadata=dict(payload.get("case_metadata", {})),
@@ -450,8 +476,8 @@ def load_trajectory_contract_descriptor(
     """Load a portable JSON + NumPy trajectory contract and fully validate it.
 
     File paths are resolved relative to the descriptor but are not included in the
-    scientific authority fingerprint. Identity is content-addressed through the exact
-    state tensor and temporal metadata.
+    scientific fingerprint. Identity is content-addressed through the exact state
+    tensor and temporal metadata.
     """
 
     path = Path(descriptor_path).resolve()
@@ -466,19 +492,18 @@ def load_trajectory_contract_descriptor(
             raise ValueError(f"trajectory contract missing data.{name}")
         return np.load(root / str(relative), allow_pickle=False)
 
-    states = load("states")
-    trajectory_ids = load("trajectory_ids")
-    starts = load("start_times_s")
-    stops = load("stop_times_s")
     valid_relative = payload.get("data", {}).get("valid_mask")
-    valid = None if not valid_relative else np.load(root / str(valid_relative), allow_pickle=False)
     data = TrajectoryEvidenceData(
         dataset_id=str(payload["dataset_id"]),
-        states=states,
-        trajectory_ids=trajectory_ids,
-        start_times_s=starts,
-        stop_times_s=stops,
-        valid_mask=valid,
+        states=load("states"),
+        trajectory_ids=load("trajectory_ids"),
+        start_times_s=load("start_times_s"),
+        stop_times_s=load("stop_times_s"),
+        valid_mask=(
+            None
+            if not valid_relative
+            else np.load(root / str(valid_relative), allow_pickle=False)
+        ),
         metadata=dict(payload.get("data_metadata", {})),
     )
 
@@ -489,16 +514,20 @@ def load_trajectory_contract_descriptor(
         fit_indices=np.asarray(split.get("fit_indices", []), dtype=np.int64),
         calibration_indices=np.asarray(split.get("calibration_indices", []), dtype=np.int64),
         evaluation_indices=np.asarray(split.get("evaluation_indices", []), dtype=np.int64),
-        representation_fit_indices=np.asarray(split.get("representation_fit_indices", []), dtype=np.int64),
+        representation_fit_indices=np.asarray(
+            split.get("representation_fit_indices", []),
+            dtype=np.int64,
+        ),
         latent_dimension=int(payload["latent_dimension"]),
         time_step_policy=str(payload.get("time_step_policy", "fixed")),  # type: ignore[arg-type]
-        expected_step_seconds=(
-            None if payload.get("expected_step_seconds") is None else float(payload["expected_step_seconds"])
-        ),
+        expected_window_seconds=float(payload["expected_window_seconds"]),
+        expected_step_seconds=float(payload["expected_step_seconds"]),
         step_tolerance_seconds=float(payload.get("step_tolerance_seconds", 1e-6)),
         purge_seconds=float(payload.get("purge_seconds", 0.0)),
         upstream_authority_fingerprint=(
-            None if payload.get("upstream_authority_fingerprint") is None else str(payload["upstream_authority_fingerprint"])
+            None
+            if payload.get("upstream_authority_fingerprint") is None
+            else str(payload["upstream_authority_fingerprint"])
         ),
         source_revisions=dict(payload.get("source_revisions", {})),
         case_metadata=dict(payload.get("case_metadata", {})),
