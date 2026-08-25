@@ -1,9 +1,9 @@
 """Experiment-stage task entry point.
 
 Most manifest stages remain deliberate reviewed contracts until their dataset/model
-executors land. Implemented mathematical and synthetic gates may run here when they
-can be qualified without downloading data or fabricating scientific artifacts.
-Unknown or unfinished stages fail explicitly with exit code 3.
+executors land. Implemented mathematical, synthetic, and evidence-authority stages
+may run here when they can be qualified without downloading data or fabricating
+scientific artifacts. Unknown or unfinished stages fail explicitly with exit code 3.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from ..e002_synthetic import (
     run_e002_synthetic_recovery_grid,
 )
 from ..equivalence import audit_density_covariance_equivalence
+from ..trajectory_authority import load_trajectory_contract_descriptor
 
 
 def _write_json(output: Path, payload: dict[str, Any]) -> None:
@@ -56,11 +57,7 @@ def _density_covariance_gate(*, output: Path, atol: float) -> dict[str, Any]:
     probes: list[dict[str, Any]] = []
     for name, values in (("real", real_probe), ("complex", complex_probe)):
         for center in (True, False):
-            audit = audit_density_covariance_equivalence(
-                values,
-                center=center,
-                atol=atol,
-            )
+            audit = audit_density_covariance_equivalence(values, center=center, atol=atol)
             probes.append({"probe": name, **audit.to_mapping()})
 
     equivalent = all(bool(item["equivalent_within_tolerance"]) for item in probes)
@@ -87,16 +84,8 @@ def _density_covariance_gate(*, output: Path, atol: float) -> dict[str, Any]:
     return payload
 
 
-def _e002_synthetic_recovery(
-    *,
-    output: Path,
-    seed: int,
-    noise_std: float,
-) -> dict[str, Any]:
-    payload = run_e002_synthetic_recovery_grid(
-        seed=int(seed),
-        noise_std=float(noise_std),
-    )
+def _e002_synthetic_recovery(*, output: Path, seed: int, noise_std: float) -> dict[str, Any]:
+    payload = run_e002_synthetic_recovery_grid(seed=int(seed), noise_std=float(noise_std))
     payload = {
         **payload,
         "status": "pass" if payload["synthetic_identifiability_gate_pass"] else "fail",
@@ -106,11 +95,7 @@ def _e002_synthetic_recovery(
     return payload
 
 
-def _e002_identifiability_gate(
-    *,
-    input_path: Path,
-    output: Path,
-) -> dict[str, Any]:
+def _e002_identifiability_gate(*, input_path: Path, output: Path) -> dict[str, Any]:
     if not input_path.is_file():
         raise FileNotFoundError(f"synthetic recovery artifact not found: {input_path}")
     source = json.loads(input_path.read_text(encoding="utf-8"))
@@ -121,16 +106,12 @@ def _e002_identifiability_gate(
     sign_inversions = int(source.get("systematic_sign_inversions", -1))
     affine_equivalence = bool(source.get("affine_equivalence_pass", False))
     gauge_witness = bool(source.get("gauge_nonidentifiability_witness_pass", False))
-    max_structure_residual = float(
-        source.get("max_canonical_structure_residual", float("inf"))
-    )
+    max_structure_residual = float(source.get("max_canonical_structure_residual", float("inf")))
     canonical_structure = bool(source.get("canonical_structure_pass", False))
     adversary = source.get("classical_adversary", {})
     if not isinstance(adversary, dict):
         adversary = {}
-    adversary_residual = float(
-        adversary.get("canonical_structure_residual", float("-inf"))
-    )
+    adversary_residual = float(adversary.get("canonical_structure_residual", float("-inf")))
     adversary_rejected = bool(adversary.get("rejected_as_canonical_family", False))
     source_gate = bool(source.get("synthetic_identifiability_gate_pass", False))
 
@@ -188,6 +169,37 @@ def _e002_identifiability_gate(
     return payload
 
 
+def _e002_trajectory_contract(*, input_path: Path, output: Path) -> dict[str, Any]:
+    if not input_path.is_file():
+        raise FileNotFoundError(f"trajectory contract descriptor not found: {input_path}")
+    data, authority = load_trajectory_contract_descriptor(input_path)
+    payload = {
+        "schema_version": 1,
+        "status": "pass",
+        "experiment": "E002",
+        "artifact_role": "trajectory_evidence_authority",
+        "claim_class": "quantum_inspired",
+        "descriptor": str(input_path),
+        "authority": authority.to_dict(data=data),
+        "shared_tensor_contract": {
+            "data_sha256": data.data_sha256,
+            "state_dimension": data.state_dimension,
+            "fit_transition_count": int(len(authority.transition_pairs(data, "fit"))),
+            "calibration_transition_count": int(len(authority.transition_pairs(data, "calibration"))),
+            "evaluation_transition_count": int(len(authority.transition_pairs(data, "evaluation"))),
+            "required_for_all_model_lanes": True,
+        },
+        "interpretation": (
+            "The trajectory authority freezes exact state bytes, temporal identity, legal "
+            "within-role transitions, purge gaps, and representation-fit scope. Passing "
+            "this stage authorizes later model fitting but provides no predictive or "
+            "physical-quantum evidence by itself."
+        ),
+    }
+    _write_json(output, payload)
+    return payload
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task")
@@ -201,41 +213,32 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        if (
-            args.task == "equivalence-audit"
-            and args.experiment == "E001"
-            and args.qualifier == "density-covariance"
-        ):
+        if args.task == "equivalence-audit" and args.experiment == "E001" and args.qualifier == "density-covariance":
             output = Path(args.output or "equivalence_audit.json")
             payload = _density_covariance_gate(output=output, atol=float(args.atol))
-            payload = {**payload, "artifact": str(output)}
-            print(json.dumps(payload, sort_keys=True))
+            print(json.dumps({**payload, "artifact": str(output)}, sort_keys=True))
             return 0 if payload["equivalent_within_tolerance"] else 2
 
         if args.task == "synthetic-recovery" and args.experiment == "E002":
             output = Path(args.output or "synthetic_recovery.json")
-            payload = _e002_synthetic_recovery(
-                output=output,
-                seed=int(args.seed),
-                noise_std=float(args.noise_std),
-            )
+            payload = _e002_synthetic_recovery(output=output, seed=int(args.seed), noise_std=float(args.noise_std))
             print(json.dumps({**payload, "artifact": str(output)}, sort_keys=True))
             return 0 if payload["synthetic_identifiability_gate_pass"] else 2
 
-        if (
-            args.task == "gate"
-            and args.experiment == "E002"
-            and args.qualifier == "identifiability"
-        ):
+        if args.task == "gate" and args.experiment == "E002" and args.qualifier == "identifiability":
             input_path = Path(args.input or "synthetic_recovery.json")
             output = Path(args.output or "identifiability_gate.json")
-            payload = _e002_identifiability_gate(
-                input_path=input_path,
-                output=output,
-            )
+            payload = _e002_identifiability_gate(input_path=input_path, output=output)
             print(json.dumps({**payload, "artifact": str(output)}, sort_keys=True))
             return 0 if payload["trajectory_contract_stage_eligible"] else 2
-    except (FileNotFoundError, ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
+
+        if args.task == "trajectory-contract" and args.experiment == "E002":
+            input_path = Path(args.input or "trajectory_contract.json")
+            output = Path(args.output or "trajectory_index.json")
+            payload = _e002_trajectory_contract(input_path=input_path, output=output)
+            print(json.dumps({**payload, "artifact": str(output)}, sort_keys=True))
+            return 0
+    except (FileNotFoundError, KeyError, TypeError, ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
         print(json.dumps({"status": "error", "message": str(exc)}, sort_keys=True))
         return 2
 
