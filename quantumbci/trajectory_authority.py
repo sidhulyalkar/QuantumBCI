@@ -28,6 +28,21 @@ TimeStepPolicy = Literal["fixed"]
 MissingDataPolicy = Literal["reject"]
 
 
+def _canonical_json_bytes(value: Any) -> bytes:
+    """Serialize scientific identity without implicit string coercion.
+
+    ``default=str`` is intentionally forbidden: a local ``Path`` or arbitrary Python
+    object must not silently become machine-specific scientific identity.
+    """
+
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
 def _readonly_array(values: Any, *, dtype: Any | None = None) -> Array:
     array = np.asarray(values, dtype=dtype).copy()
     array.setflags(write=False)
@@ -57,6 +72,17 @@ def _sha256_array(digest: Any, array: Array) -> None:
     digest.update(b"\0")
     digest.update(memoryview(contiguous).cast("B"))
     digest.update(b"\0")
+
+
+def _validate_string_mapping(values: Mapping[str, str], *, name: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, value in values.items():
+        if not isinstance(key, str) or not key:
+            raise TypeError(f"{name} keys must be non-empty strings")
+        if not isinstance(value, str) or not value:
+            raise TypeError(f"{name} values must be non-empty strings")
+        result[key] = value
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,12 +128,15 @@ class TrajectoryEvidenceData:
             if len(valid) != n:
                 raise ValueError("valid_mask must align one-to-one with states")
 
+        metadata = dict(self.metadata)
+        _canonical_json_bytes(metadata)  # fail on Paths/arbitrary objects/non-finite floats
+
         object.__setattr__(self, "states", states)
         object.__setattr__(self, "trajectory_ids", trajectory_ids)
         object.__setattr__(self, "start_times_s", starts)
         object.__setattr__(self, "stop_times_s", stops)
         object.__setattr__(self, "valid_mask", valid)
-        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+        object.__setattr__(self, "metadata", MappingProxyType(metadata))
 
     @property
     def n_windows(self) -> int:
@@ -133,9 +162,7 @@ class TrajectoryEvidenceData:
             "valid_mask": [bool(v) for v in self.valid_mask.tolist()],
             "metadata": dict(self.metadata),
         }
-        digest.update(
-            json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-        )
+        digest.update(_canonical_json_bytes(identity))
         return digest.hexdigest()
 
 
@@ -181,9 +208,34 @@ def _minimum_interval_separation(
                 minimum = min(minimum, a_start - b_stop)
                 j += 1
             else:
-                # Magnitude is overlap duration; only the sign is needed by the gate.
                 return -(min(a_stop, b_stop) - max(a_start, b_start))
     return minimum
+
+
+def _assert_role_precedes(
+    data: TrajectoryEvidenceData,
+    earlier_name: str,
+    earlier_indices: tuple[int, ...],
+    later_name: str,
+    later_indices: tuple[int, ...],
+    *,
+    purge_seconds: float,
+    tolerance: float,
+) -> None:
+    """Require forward evidence ordering whenever two roles share a trajectory."""
+
+    earlier_by = _by_trajectory(data, earlier_indices)
+    later_by = _by_trajectory(data, later_indices)
+    for trajectory_id in set(earlier_by) & set(later_by):
+        earlier_stop = max(float(data.stop_times_s[i]) for i in earlier_by[trajectory_id])
+        later_start = min(float(data.start_times_s[i]) for i in later_by[trajectory_id])
+        separation = later_start - earlier_stop
+        if separation < purge_seconds - tolerance:
+            raise ValueError(
+                f"noncausal evidence ordering for trajectory {trajectory_id!r}: "
+                f"{earlier_name} must precede {later_name} by >= {purge_seconds:.9g}s; "
+                f"observed separation={separation:.9g}s"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,14 +280,13 @@ class TrajectoryEvidenceAuthority:
             raise ValueError("expected window and step durations must be positive")
         if self.step_tolerance_seconds < 0 or self.purge_seconds < 0:
             raise ValueError("time tolerance and purge_seconds must be non-negative")
+        if self.upstream_authority_fingerprint is not None and not self.upstream_authority_fingerprint:
+            raise ValueError("upstream_authority_fingerprint must be non-empty when provided")
 
         fit = _indices(self.fit_indices, name="fit_indices")
         calibration = _indices(self.calibration_indices, name="calibration_indices")
         evaluation = _indices(self.evaluation_indices, name="evaluation_indices")
-        representation = _indices(
-            self.representation_fit_indices,
-            name="representation_fit_indices",
-        )
+        representation = _indices(self.representation_fit_indices, name="representation_fit_indices")
         if not fit or not evaluation:
             raise ValueError("fit_indices and evaluation_indices must be non-empty")
         if not representation:
@@ -248,12 +299,16 @@ class TrajectoryEvidenceAuthority:
         if any(index >= self.n_windows for index in fit + calibration + evaluation + representation):
             raise ValueError("authority contains out-of-range indices")
 
+        revisions = _validate_string_mapping(self.source_revisions, name="source_revisions")
+        metadata = dict(self.case_metadata)
+        _canonical_json_bytes(metadata)
+
         object.__setattr__(self, "fit_indices", fit)
         object.__setattr__(self, "calibration_indices", calibration)
         object.__setattr__(self, "evaluation_indices", evaluation)
         object.__setattr__(self, "representation_fit_indices", representation)
-        object.__setattr__(self, "source_revisions", MappingProxyType(dict(self.source_revisions)))
-        object.__setattr__(self, "case_metadata", MappingProxyType(dict(self.case_metadata)))
+        object.__setattr__(self, "source_revisions", MappingProxyType(revisions))
+        object.__setattr__(self, "case_metadata", MappingProxyType(metadata))
 
     @classmethod
     def from_data(
@@ -284,10 +339,7 @@ class TrajectoryEvidenceAuthority:
             fit_indices=_indices(fit_indices, name="fit_indices"),
             calibration_indices=_indices(calibration_indices, name="calibration_indices"),
             evaluation_indices=_indices(evaluation_indices, name="evaluation_indices"),
-            representation_fit_indices=_indices(
-                representation_fit_indices,
-                name="representation_fit_indices",
-            ),
+            representation_fit_indices=_indices(representation_fit_indices, name="representation_fit_indices"),
             latent_dimension=int(latent_dimension),
             time_step_policy=time_step_policy,
             expected_window_seconds=float(expected_window_seconds),
@@ -335,15 +387,13 @@ class TrajectoryEvidenceAuthority:
         return np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
 
     def restore(self, data: TrajectoryEvidenceData) -> "TrajectoryEvidenceAuthority":
-        """Revalidate exact tensor identity, chronology, window geometry, and purge gaps."""
+        """Revalidate tensor identity, chronology, window geometry, and causal role order."""
 
         self._validate_data_identity(data)
         selected = self.fit_indices + self.calibration_indices + self.evaluation_indices
         if any(not bool(data.valid_mask[index]) for index in selected):
             raise ValueError("authority includes invalid/missing trajectory windows")
 
-        # Duplicate starts make adjacency ambiguous even if the duplicate rows were
-        # assigned to different evidence roles.
         ids = data.trajectory_ids.astype(str)
         for trajectory_id in sorted(set(ids.tolist())):
             indices = np.flatnonzero(ids == trajectory_id)
@@ -351,7 +401,8 @@ class TrajectoryEvidenceAuthority:
             if len(starts) > 1 and np.any(np.diff(starts) <= 0):
                 raise ValueError(f"trajectory {trajectory_id!r} has duplicate/non-increasing starts")
 
-        durations = data.stop_times_s[np.asarray(selected)] - data.start_times_s[np.asarray(selected)]
+        selected_array = np.asarray(selected, dtype=np.int64)
+        durations = data.stop_times_s[selected_array] - data.start_times_s[selected_array]
         if np.any(np.abs(durations - self.expected_window_seconds) > self.step_tolerance_seconds):
             raise ValueError("selected windows violate expected_window_seconds")
 
@@ -372,6 +423,36 @@ class TrajectoryEvidenceAuthority:
                         f"temporal leakage between {left_name} and {right_name}: "
                         f"minimum separation={separation:.9g}s < purge={self.purge_seconds:.9g}s"
                     )
+
+        # Deployment-style evidence must flow forward when roles share a trajectory.
+        if self.calibration_indices:
+            _assert_role_precedes(
+                data,
+                "fit",
+                self.fit_indices,
+                "calibration",
+                self.calibration_indices,
+                purge_seconds=self.purge_seconds,
+                tolerance=self.step_tolerance_seconds,
+            )
+            _assert_role_precedes(
+                data,
+                "calibration",
+                self.calibration_indices,
+                "evaluation",
+                self.evaluation_indices,
+                purge_seconds=self.purge_seconds,
+                tolerance=self.step_tolerance_seconds,
+            )
+        _assert_role_precedes(
+            data,
+            "fit",
+            self.fit_indices,
+            "evaluation",
+            self.evaluation_indices,
+            purge_seconds=self.purge_seconds,
+            tolerance=self.step_tolerance_seconds,
+        )
 
         # Gaps larger than the declared stride are legitimate block boundaries. Gaps
         # *smaller* than the stride reveal a denser/overlapping temporal lattice than
@@ -395,8 +476,7 @@ class TrajectoryEvidenceAuthority:
     @property
     def authority_fingerprint(self) -> str:
         payload = self.to_dict(include_fingerprint=False)
-        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()[:16]
 
     def to_dict(
         self,
@@ -473,12 +553,7 @@ class TrajectoryEvidenceAuthority:
 def load_trajectory_contract_descriptor(
     descriptor_path: str | Path,
 ) -> tuple[TrajectoryEvidenceData, TrajectoryEvidenceAuthority]:
-    """Load a portable JSON + NumPy trajectory contract and fully validate it.
-
-    File paths are resolved relative to the descriptor but are not included in the
-    scientific fingerprint. Identity is content-addressed through the exact state
-    tensor and temporal metadata.
-    """
+    """Load a portable JSON + NumPy trajectory contract and fully validate it."""
 
     path = Path(descriptor_path).resolve()
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -500,12 +575,14 @@ def load_trajectory_contract_descriptor(
         start_times_s=load("start_times_s"),
         stop_times_s=load("stop_times_s"),
         valid_mask=(
-            None
-            if not valid_relative
-            else np.load(root / str(valid_relative), allow_pickle=False)
+            None if not valid_relative else np.load(root / str(valid_relative), allow_pickle=False)
         ),
         metadata=dict(payload.get("data_metadata", {})),
     )
+
+    revisions = payload.get("source_revisions")
+    if not isinstance(revisions, dict) or not revisions:
+        raise ValueError("trajectory contract requires non-empty source_revisions")
 
     split = dict(payload.get("split", {}))
     authority = TrajectoryEvidenceAuthority.from_data(
@@ -514,10 +591,7 @@ def load_trajectory_contract_descriptor(
         fit_indices=np.asarray(split.get("fit_indices", []), dtype=np.int64),
         calibration_indices=np.asarray(split.get("calibration_indices", []), dtype=np.int64),
         evaluation_indices=np.asarray(split.get("evaluation_indices", []), dtype=np.int64),
-        representation_fit_indices=np.asarray(
-            split.get("representation_fit_indices", []),
-            dtype=np.int64,
-        ),
+        representation_fit_indices=np.asarray(split.get("representation_fit_indices", []), dtype=np.int64),
         latent_dimension=int(payload["latent_dimension"]),
         time_step_policy=str(payload.get("time_step_policy", "fixed")),  # type: ignore[arg-type]
         expected_window_seconds=float(payload["expected_window_seconds"]),
@@ -529,7 +603,7 @@ def load_trajectory_contract_descriptor(
             if payload.get("upstream_authority_fingerprint") is None
             else str(payload["upstream_authority_fingerprint"])
         ),
-        source_revisions=dict(payload.get("source_revisions", {})),
+        source_revisions=revisions,
         case_metadata=dict(payload.get("case_metadata", {})),
     )
     return data, authority
