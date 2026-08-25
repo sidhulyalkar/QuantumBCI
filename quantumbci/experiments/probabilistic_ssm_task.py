@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from ..classical_dynamics import DIRECT_DISCRETE_ESTIMATOR_ID
+from ..classical_dynamics import DIRECT_DISCRETE_ESTIMATOR_ID, run_extended_classical_controls
 from ..probabilistic_ssm import run_probabilistic_state_space_control
 from ..trajectory_authority import load_trajectory_contract_descriptor
 
@@ -122,6 +122,8 @@ def _verify_classical_controls(
     classical: dict[str, Any],
     *,
     identity: dict[str, str],
+    data: Any,
+    authority: Any,
 ) -> dict[str, Any]:
     if classical.get("experiment") != "E002":
         raise ValueError("classical controls artifact is not E002")
@@ -160,6 +162,17 @@ def _verify_classical_controls(
             raise ValueError(
                 f"classical controls full_var1.{field} differs from current trajectory authority"
             )
+
+    # Reconstruct the v0.10 control artifact independently from the frozen tensor and
+    # authority. This prevents a hand-edited full-VAR transition from becoming the
+    # authoritative v0.11 mean merely because its surrounding hashes were left intact.
+    expected_controls = run_extended_classical_controls(data, authority).to_mapping()["controls"]
+    expected_full_var = expected_controls["full_var1"]
+    if full_var != expected_full_var:
+        raise ValueError(
+            "classical controls full_var1 differs from independent reconstruction under current authority"
+        )
+
     transition = np.asarray(full_var.get("transition"), dtype=float)
     intercept = np.asarray(full_var.get("intercept"), dtype=float).reshape(-1)
     if transition.shape != (3, 3) or intercept.shape != (3,):
@@ -184,7 +197,12 @@ def build_probabilistic_ssm_artifact(
     _verify_trajectory_index(trajectory_index, data=data, authority=authority)
     identity = _expected_identity(data, authority)
     _verify_matched_baseline(matched, identity=identity)
-    full_var = _verify_classical_controls(classical, identity=identity)
+    full_var = _verify_classical_controls(
+        classical,
+        identity=identity,
+        data=data,
+        authority=authority,
+    )
 
     transition = np.asarray(full_var["transition"], dtype=float)
     intercept = np.asarray(full_var["intercept"], dtype=float)
