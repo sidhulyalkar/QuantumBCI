@@ -106,19 +106,28 @@ jobs:
           artifact = json.load(open('matched_dynamics.json'))
           affine = artifact['affine']
           canonical = artifact['canonical']
+          ranks = artifact['fit_rank_diagnostics']
           assert artifact['status'] == 'pass'
           assert artifact['artifact_role'] == 'matched_dynamics_baseline'
           assert artifact['same_evidence_verified'] is True
           assert artifact['calibration_used'] is False
           assert artifact['parameter_reduction'] == 8
+          assert artifact['authoritative_ridge'] == 0.0
+          assert artifact['regularization_geometry_matched'] is True
           assert affine['parameter_count'] == 12
           assert canonical['parameter_count'] == 4
+          assert ranks == {
+              'affine_predictor_design_rank': 4,
+              'affine_parameter_rank': 12,
+              'affine_parameter_count': 12,
+              'canonical_design_rank': 4,
+              'canonical_parameter_rank': 4,
+              'canonical_parameter_count': 4,
+          }
           assert affine['fit_estimator_id'] == canonical['fit_estimator_id'] == 'forward_difference_least_squares_v1'
           assert affine['score_integrator_id'] == canonical['score_integrator_id'] == 'rk4_one_step_and_rollout_v1'
           for field in ('authority_fingerprint', 'data_sha256', 'fit_transition_sha256', 'evaluation_transition_sha256'):
               assert affine[field] == canonical[field] == artifact[field]
-          assert canonical['fit_design_rank'] == 4
-          assert affine['fit_design_rank'] == 4
           assert canonical['evaluation_metrics']['one_step_rmse'] < 0.01
           assert canonical['evaluation_metrics']['rollout_rmse'] < 0.02
           assert canonical['evaluation_metrics']['target_physical_fraction'] == 1.0
@@ -130,6 +139,29 @@ jobs:
           assert artifact['intervention_stage_eligible'] is False
           rendered = json.dumps(artifact)
           assert '/tmp/' not in rendered
+          PY
+
+      - name: Reject unmatched regularization geometry
+        run: |
+          cd /tmp/e002-matched
+          rm -f nonzero_ridge_should_not_exist.json
+          set +e
+          python -m quantumbci.experiments.tasks \
+            fit-matched-dynamics E002 \
+            --input trajectory_contract.json \
+            --trajectory-index trajectory_index.json \
+            --output nonzero_ridge_should_not_exist.json \
+            --ridge 0.001 \
+            > nonzero_ridge_stdout.json
+          code=$?
+          set -e
+          test "$code" -eq 2
+          test ! -f nonzero_ridge_should_not_exist.json
+          python - <<'PY'
+          import json
+          payload = json.load(open('nonzero_ridge_stdout.json'))
+          assert payload['status'] == 'error'
+          assert 'requires ridge=0' in payload['message']
           PY
 
       - name: Reject tampered authority before fitting
@@ -187,6 +219,7 @@ jobs:
           assert stages['fit_matched_baseline']['depends_on'] == ['trajectory_contract']
           assert 'fit-matched-dynamics' in stages['fit_matched_baseline']['command']
           assert stages['fit_extended_classical_controls']['depends_on'] == ['fit_matched_baseline']
+          assert stages['fit_matched_baseline']['command'][-1] == '0'
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-matched-wheel
           python - <<'PY'
