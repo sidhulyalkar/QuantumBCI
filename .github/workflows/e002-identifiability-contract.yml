@@ -38,7 +38,7 @@ jobs:
           assert payload['dynamical_information_novel'] is False
           PY
 
-      - name: Qualify installed moderate-SNR synthetic recovery
+      - name: Qualify installed moderate-SNR synthetic recovery and family specificity
         run: |
           quantumbci-audit e002-synthetic \
             --seed 2027 \
@@ -53,6 +53,12 @@ jobs:
           assert payload['systematic_sign_inversions'] == 0
           assert payload['affine_equivalence_pass'] is True
           assert payload['gauge_nonidentifiability_witness_pass'] is True
+          assert payload['canonical_structure_pass'] is True
+          assert payload['max_canonical_structure_residual'] <= payload['canonical_structure_residual_max_allowed']
+          adversary = payload['classical_adversary']
+          assert adversary['rejected_as_canonical_family'] is True
+          assert adversary['canonical_structure_residual'] >= adversary['minimum_rejection_residual']
+          assert payload['dynamical_information_novel'] is False
           assert payload['physical_quantum_promotion_eligible'] is False
           PY
 
@@ -74,8 +80,12 @@ jobs:
           recovery = json.load(open('synthetic_recovery.json'))
           gate = json.load(open('identifiability_gate.json'))
           assert recovery['status'] == 'pass'
+          assert recovery['canonical_structure_pass'] is True
+          assert recovery['classical_adversary']['rejected_as_canonical_family'] is True
           assert gate['status'] == 'pass'
           assert gate['trajectory_contract_stage_eligible'] is True
+          assert gate['observed']['canonical_structure_pass'] is True
+          assert gate['observed']['classical_adversary_rejected'] is True
           assert gate['dynamical_information_novel'] is False
           PY
 
