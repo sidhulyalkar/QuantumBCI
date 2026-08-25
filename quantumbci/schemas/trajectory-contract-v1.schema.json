@@ -14,6 +14,7 @@
     "expected_window_seconds",
     "expected_step_seconds",
     "purge_seconds",
+    "source_revisions",
     "data",
     "split"
   ],
@@ -33,7 +34,9 @@
     },
     "source_revisions": {
       "type": "object",
-      "additionalProperties": {"type": "string"}
+      "minProperties": 1,
+      "propertyNames": {"minLength": 1},
+      "additionalProperties": {"type": "string", "minLength": 1}
     },
     "case_metadata": {"type": "object"},
     "data_metadata": {"type": "object"},
