@@ -224,6 +224,11 @@ def _e002_fit_matched_dynamics(
     output: Path,
     ridge: float,
 ) -> dict[str, Any]:
+    if float(ridge) != 0.0:
+        raise ValueError(
+            "the authoritative v0.9 matched baseline requires ridge=0 because nonzero "
+            "regularization has different geometry in the affine and canonical coordinates"
+        )
     if not descriptor_path.is_file():
         raise FileNotFoundError(f"trajectory contract descriptor not found: {descriptor_path}")
     data, authority = load_trajectory_contract_descriptor(descriptor_path)
@@ -232,7 +237,7 @@ def _e002_fit_matched_dynamics(
         data=data,
         authority=authority,
     )
-    result = run_matched_qubit_dynamics_benchmark(data, authority, ridge=float(ridge))
+    result = run_matched_qubit_dynamics_benchmark(data, authority, ridge=0.0)
     payload = {
         **result.to_mapping(),
         "status": "pass",
@@ -244,6 +249,16 @@ def _e002_fit_matched_dynamics(
             "unconstrained_affine_generator",
             "canonical_lindblad_family",
         ],
+        "authoritative_ridge": 0.0,
+        "regularization_geometry_matched": True,
+        "fit_rank_diagnostics": {
+            "affine_predictor_design_rank": int(result.affine.fit_design_rank),
+            "affine_parameter_rank": int(result.affine.fit_design_rank * data.state_dimension),
+            "affine_parameter_count": int(result.affine.parameter_count),
+            "canonical_design_rank": int(result.canonical.fit_design_rank),
+            "canonical_parameter_rank": int(result.canonical.fit_design_rank),
+            "canonical_parameter_count": int(result.canonical.parameter_count),
+        },
         "extended_classical_controls_required": True,
         "intervention_stage_eligible": False,
         "interpretation_ceiling": (
