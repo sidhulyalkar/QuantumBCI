@@ -117,6 +117,20 @@ class EvidenceGate:
         }
 
 
+def validate_monotonic_promotion(gates: Iterable[EvidenceGate]) -> None:
+    """Raise when a later tier passes despite an earlier non-pass gate."""
+
+    ordered = sorted(tuple(gates), key=lambda gate: int(gate.tier))
+    blocked = False
+    for gate in ordered:
+        if blocked and gate.status == GateStatus.PASS:
+            raise ValueError(
+                f"gate {gate.id!r} passes after an earlier tier blocked promotion"
+            )
+        if gate.status != GateStatus.PASS:
+            blocked = True
+
+
 @dataclass(frozen=True)
 class MechanismNecessityProfile:
     """Mechanism x neural-signature evidence profile."""
@@ -140,6 +154,7 @@ class MechanismNecessityProfile:
             raise ValueError("BMRB v1 allows exactly one evidence gate per tier")
         if EvidenceTier.DESCRIPTIVE not in tiers:
             raise ValueError("BMRB profiles must include a descriptive evidence gate")
+        validate_monotonic_promotion(self.gates)
         physical = next(
             (gate for gate in self.gates if gate.tier == EvidenceTier.PHYSICAL_QUANTUM),
             None,
@@ -254,19 +269,3 @@ def bmrb_dynamics_signature() -> RecapitulationSignature:
 
 def gate_map(profile: MechanismNecessityProfile) -> dict[str, EvidenceGate]:
     return {gate.id: gate for gate in profile.gates}
-
-
-def validate_monotonic_promotion(
-    gates: Iterable[EvidenceGate],
-) -> None:
-    """Raise when a later tier passes despite an earlier non-pass gate."""
-
-    ordered = sorted(tuple(gates), key=lambda gate: int(gate.tier))
-    blocked = False
-    for gate in ordered:
-        if blocked and gate.status == GateStatus.PASS:
-            raise ValueError(
-                f"gate {gate.id!r} passes after an earlier tier blocked promotion"
-            )
-        if gate.status != GateStatus.PASS:
-            blocked = True
