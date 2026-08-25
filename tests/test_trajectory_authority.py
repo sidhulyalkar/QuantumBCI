@@ -94,6 +94,27 @@ def test_index_order_does_not_change_scientific_identity() -> None:
     assert second.authority_fingerprint == first.authority_fingerprint
 
 
+def test_source_revision_change_changes_authority_identity() -> None:
+    data = _fixture()
+    first = _authority(data)
+    second = TrajectoryEvidenceAuthority.from_data(
+        data,
+        case_id=first.case_id,
+        fit_indices=first.fit_indices,
+        calibration_indices=first.calibration_indices,
+        evaluation_indices=first.evaluation_indices,
+        representation_fit_indices=first.representation_fit_indices,
+        latent_dimension=3,
+        expected_window_seconds=1.0,
+        expected_step_seconds=1.0,
+        step_tolerance_seconds=1e-9,
+        purge_seconds=1.0,
+        upstream_authority_fingerprint="neuros-case-abc123",
+        source_revisions={"quantumbci": "different-qbc-sha", "neuros": "neuros-sha"},
+    )
+    assert second.authority_fingerprint != first.authority_fingerprint
+
+
 def test_tensor_mutation_breaks_authority_identity() -> None:
     data = _fixture()
     authority = _authority(data)
@@ -121,6 +142,25 @@ def test_temporal_purge_blocks_target_boundary_leakage() -> None:
             fit_indices=np.arange(0, 6),
             calibration_indices=np.asarray([6, 7]),
             evaluation_indices=np.asarray([8, 9, 10, 11]),
+            representation_fit_indices=np.arange(0, 4),
+            latent_dimension=3,
+            expected_window_seconds=1.0,
+            expected_step_seconds=1.0,
+            purge_seconds=1.0,
+        )
+
+
+def test_noncausal_target_role_order_fails_even_with_large_purge_gap() -> None:
+    data = _fixture()
+    # Calibration is later in the target trajectory than final evaluation. The two
+    # roles are well separated, so a pure overlap/purge test would miss this leak.
+    with pytest.raises(ValueError, match="noncausal evidence ordering"):
+        TrajectoryEvidenceAuthority.from_data(
+            data,
+            case_id="future-calibration",
+            fit_indices=np.arange(0, 6),
+            calibration_indices=np.asarray([10, 11]),
+            evaluation_indices=np.asarray([6, 7]),
             representation_fit_indices=np.arange(0, 4),
             latent_dimension=3,
             expected_window_seconds=1.0,
@@ -200,8 +240,6 @@ def test_unexpectedly_dense_fixed_step_windows_fail_closed() -> None:
     base = _fixture()
     starts = np.asarray(base.start_times_s).copy()
     stops = np.asarray(base.stop_times_s).copy()
-    # Move one selected fit window earlier so the start lattice becomes denser than
-    # the declared one-second stride without duplicating a timestamp.
     starts[4] = 3.5
     stops[4] = 4.5
     data = TrajectoryEvidenceData(
@@ -231,6 +269,19 @@ def test_irregular_timing_is_deliberately_unsupported_in_v1() -> None:
             expected_window_seconds=1.0,
             expected_step_seconds=1.0,
             purge_seconds=1.0,
+        )
+
+
+def test_non_json_metadata_cannot_enter_scientific_fingerprint() -> None:
+    base = _fixture()
+    with pytest.raises(TypeError, match="JSON serializable"):
+        TrajectoryEvidenceData(
+            dataset_id=base.dataset_id,
+            states=base.states,
+            trajectory_ids=base.trajectory_ids,
+            start_times_s=base.start_times_s,
+            stop_times_s=base.stop_times_s,
+            metadata={"local_path": Path("/tmp/machine-specific")},
         )
 
 
@@ -291,4 +342,13 @@ def test_descriptor_rejects_missing_required_array(tmp_path: Path) -> None:
     del payload["data"]["stop_times_s"]
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="data.stop_times_s"):
+        load_trajectory_contract_descriptor(path)
+
+
+def test_descriptor_requires_source_revisions(tmp_path: Path) -> None:
+    path = _write_descriptor(tmp_path)
+    payload = json.loads(path.read_text())
+    del payload["source_revisions"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="source_revisions"):
         load_trajectory_contract_descriptor(path)
