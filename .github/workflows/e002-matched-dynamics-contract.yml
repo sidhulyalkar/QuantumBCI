@@ -193,16 +193,16 @@ jobs:
           assert 'differs' in payload['message']
           PY
 
-      - name: Keep stronger classical controls fail-closed
+      - name: Keep legacy unmatched classical-control route fail-closed
         run: |
           set +e
-          python -m quantumbci.experiments.tasks fit-dynamics-controls E002 --input /tmp/e002-matched/matched_dynamics.json > /tmp/extended-controls.json
+          python -m quantumbci.experiments.tasks fit-dynamics-controls E002 --input /tmp/e002-matched/matched_dynamics.json > /tmp/legacy-controls.json
           code=$?
           set -e
           test "$code" -eq 3
           python - <<'PY'
           import json
-          payload = json.load(open('/tmp/extended-controls.json'))
+          payload = json.load(open('/tmp/legacy-controls.json'))
           assert payload['status'] == 'not_implemented'
           PY
 
@@ -216,18 +216,35 @@ jobs:
           packaged = json.loads(Path('quantumbci/experiments/manifests/E002_lindblad_dynamics.json').read_text())
           assert source == packaged
           stages = {stage['id']: stage for stage in source['stages']}
-          assert stages['fit_matched_baseline']['depends_on'] == ['trajectory_contract']
-          assert 'fit-matched-dynamics' in stages['fit_matched_baseline']['command']
-          assert stages['fit_extended_classical_controls']['depends_on'] == ['fit_matched_baseline']
-          assert stages['fit_matched_baseline']['command'][-1] == '0'
+          matched = stages['fit_matched_baseline']
+          controls = stages['fit_extended_classical_controls']
+          assert matched['depends_on'] == ['trajectory_contract']
+          assert 'fit-matched-dynamics' in matched['command']
+          assert matched['command'][-1] == '0'
+          assert controls['depends_on'] == ['fit_matched_baseline']
+          assert controls['command'][:3] == [
+              'python', '-m', 'quantumbci.experiments.classical_controls_task'
+          ]
+          for required in (
+              '--descriptor', 'trajectory_contract.json',
+              '--trajectory-index', 'trajectory_index.json',
+              '--matched', 'matched_dynamics.json',
+              '--output', 'classical_controls.json',
+          ):
+              assert required in controls['command']
+          assert stages['interventions']['depends_on'] == [
+              'fit_matched_baseline', 'fit_extended_classical_controls'
+          ]
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-matched-wheel
           python - <<'PY'
+          from importlib.metadata import version
           from pathlib import Path
           import zipfile
           wheels = list(Path('/tmp/quantumbci-matched-wheel').glob('quantum_bci-*.whl'))
           assert len(wheels) == 1, wheels
-          assert '0.9.0' in wheels[0].name
+          installed_version = version('quantum-bci')
+          assert f'quantum_bci-{installed_version}-' in wheels[0].name
           with zipfile.ZipFile(wheels[0]) as archive:
               names = set(archive.namelist())
           expected = {
