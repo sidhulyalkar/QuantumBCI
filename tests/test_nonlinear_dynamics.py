@@ -11,6 +11,7 @@ from quantumbci.nonlinear_dynamics import (
     NONLINEAR_SCORE_ID,
     RIDGES,
     RFF_SEED,
+    NonlinearResidualModel,
     evaluate_nonlinear_model,
     run_nonlinear_residual_control,
 )
@@ -175,8 +176,8 @@ def test_nonlinear_residual_wins_on_true_nonlinear_process() -> None:
     assert payload["model"]["model_id"] == NONLINEAR_MODEL_ID
     assert payload["evaluation_metrics"]["score_id"] == NONLINEAR_SCORE_ID
     assert payload["model"]["affine_mean_refit"] is False
-    assert payload["model"]["transition"] == pytest.approx(transition.tolist())
-    assert payload["model"]["intercept"] == pytest.approx(intercept.tolist())
+    assert np.asarray(payload["model"]["transition"]) == pytest.approx(transition)
+    assert np.asarray(payload["model"]["intercept"]) == pytest.approx(intercept)
     assert payload["model"]["rff_seed"] == RFF_SEED
     assert payload["candidate_grid"]["feature_counts"] == list(FEATURE_COUNTS)
     assert payload["candidate_grid"]["length_scale_multipliers"] == list(
@@ -195,7 +196,6 @@ def test_nonlinear_residual_wins_on_true_nonlinear_process() -> None:
         len(FEATURE_COUNTS) * len(LENGTH_SCALE_MULTIPLIERS) * len(RIDGES)
     )
 
-    # Strongly nonlinear held-out transitions must defeat the frozen affine Gaussian control.
     gain = direct.mean_nll - result.evaluation_metrics.one_step_mean_nll
     assert gain > 0.25
     assert result.evaluation_metrics.one_step_rmse < direct.predictive_mean_rmse
@@ -303,18 +303,24 @@ def test_unphysical_nonlinear_predictions_are_not_labeled_trace_distance() -> No
         fit_steps=48,
         calibration_steps=12,
     )
-    transition = np.zeros((3, 3), dtype=float)
-    intercept = np.asarray([10.0, 0.0, 0.0], dtype=float)
-    result = run_nonlinear_residual_control(
-        data,
-        authority,
-        transition,
-        intercept,
+    model = NonlinearResidualModel(
+        transition=np.zeros((3, 3), dtype=float),
+        intercept=np.asarray([10.0, 0.0, 0.0], dtype=float),
+        state_mean=np.zeros(3, dtype=float),
+        state_scale=np.ones(3, dtype=float),
+        frequencies=np.zeros((16, 3), dtype=float),
+        phases=np.zeros(16, dtype=float),
+        residual_weights=np.zeros((16, 3), dtype=float),
+        innovation_variance=np.ones(3, dtype=float) * 0.1,
+        feature_count=16,
+        length_scale_multiplier=1.0,
+        ridge=1.0,
+        effective_feature_rank=1,
     )
     metrics = evaluate_nonlinear_model(
         data,
         authority,
-        result.model,
+        model,
         role="evaluation",
     )
 
