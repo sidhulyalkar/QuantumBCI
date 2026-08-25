@@ -198,7 +198,7 @@ def test_stability_task_materializes_full_chain_and_rejects_tampering(
     }
 
     payload = json.loads(nonlinear.read_text())
-    payload["model"]["residual_weights"][0][0] += 0.25
+    payload["model"]["innovation_variance"][0] *= 2.0
     tampered = tmp_path / "nonlinear_tampered.json"
     tampered.write_text(json.dumps(payload), encoding="utf-8")
     should_not_exist = tmp_path / "should_not_exist.json"
