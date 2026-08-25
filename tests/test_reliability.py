@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from quantumbci.reliability import (
@@ -46,7 +45,6 @@ def test_balanced_repeated_panel_computes_icc_and_population_recurrence() -> Non
     assert result.population_sign_consistency == 1.0
     assert result.participant_positive_fraction == 1.0
     assert result.bootstrap_ci_low > 0.0
-    assert result.reliability_gate_defined if hasattr(result, "reliability_gate_defined") else True
     mapping = result.to_mapping()
     assert mapping["reliability_gate_defined"] is False
     assert mapping["reliability_gate_pass"] is None
