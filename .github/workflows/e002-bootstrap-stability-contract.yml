@@ -105,7 +105,7 @@ jobs:
           assert json.load(open('/tmp/v014-interventions.json'))['status'] == 'not_implemented'
           PY
 
-      - name: Qualify v0.14 wheel contents
+      - name: Qualify v0.14 wheel contents under descendant releases
         run: |
           rm -rf /tmp/quantumbci-stability-wheel
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-stability-wheel
@@ -116,7 +116,6 @@ jobs:
           wheels = list(Path('/tmp/quantumbci-stability-wheel').glob('quantum_bci-*.whl'))
           assert len(wheels) == 1, wheels
           installed_version = version('quantum-bci')
-          assert installed_version == '0.14.0'
           assert f'quantum_bci-{installed_version}-' in wheels[0].name
           with zipfile.ZipFile(wheels[0]) as archive:
               names = set(archive.namelist())
