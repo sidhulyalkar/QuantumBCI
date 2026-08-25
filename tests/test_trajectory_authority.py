@@ -14,8 +14,6 @@ from quantumbci.trajectory_authority import (
 
 
 def _fixture() -> TrajectoryEvidenceData:
-    # One six-window historical trajectory plus one six-window target trajectory.
-    # Target calibration uses t=[0,2); evaluation uses t=[3,6), leaving a one-second purge.
     states = np.asarray(
         [[0.1 * i, np.sin(i), np.cos(i)] for i in range(12)],
         dtype=np.float64,
@@ -43,6 +41,7 @@ def _authority(data: TrajectoryEvidenceData) -> TrajectoryEvidenceAuthority:
         representation_fit_indices=np.arange(0, 4),
         latent_dimension=3,
         time_step_policy="fixed",
+        expected_window_seconds=1.0,
         expected_step_seconds=1.0,
         step_tolerance_seconds=1e-9,
         purge_seconds=1.0,
@@ -68,9 +67,31 @@ def test_authority_freezes_identity_and_legal_transition_graph() -> None:
     )
     payload = authority.to_dict(data=data)
     assert payload["transition_counts"] == {"fit": 5, "calibration": 1, "evaluation": 2}
+    assert payload["expected_window_seconds"] == 1.0
     restored = TrajectoryEvidenceAuthority.from_dict(payload)
     assert restored.authority_fingerprint == authority.authority_fingerprint
     restored.restore(data)
+
+
+def test_index_order_does_not_change_scientific_identity() -> None:
+    data = _fixture()
+    first = _authority(data)
+    second = TrajectoryEvidenceAuthority.from_data(
+        data,
+        case_id=first.case_id,
+        fit_indices=[5, 4, 3, 2, 1, 0],
+        calibration_indices=[7, 6],
+        evaluation_indices=[11, 9, 10],
+        representation_fit_indices=[3, 1, 0, 2],
+        latent_dimension=3,
+        expected_window_seconds=1.0,
+        expected_step_seconds=1.0,
+        step_tolerance_seconds=1e-9,
+        purge_seconds=1.0,
+        upstream_authority_fingerprint="neuros-case-abc123",
+        source_revisions={"quantumbci": "qbc-sha", "neuros": "neuros-sha"},
+    )
+    assert second.authority_fingerprint == first.authority_fingerprint
 
 
 def test_tensor_mutation_breaks_authority_identity() -> None:
@@ -102,6 +123,7 @@ def test_temporal_purge_blocks_target_boundary_leakage() -> None:
             evaluation_indices=np.asarray([8, 9, 10, 11]),
             representation_fit_indices=np.arange(0, 4),
             latent_dimension=3,
+            expected_window_seconds=1.0,
             expected_step_seconds=1.0,
             purge_seconds=1.0,
         )
@@ -118,6 +140,7 @@ def test_representation_fit_cannot_use_calibration_or_evaluation() -> None:
             evaluation_indices=np.asarray([9, 10, 11]),
             representation_fit_indices=np.asarray([0, 1, 6]),
             latent_dimension=3,
+            expected_window_seconds=1.0,
             expected_step_seconds=1.0,
             purge_seconds=1.0,
         )
@@ -157,6 +180,60 @@ def test_duplicate_temporal_coordinate_fails_closed() -> None:
         _authority(data)
 
 
+def test_window_duration_mismatch_fails_closed() -> None:
+    base = _fixture()
+    stops = np.asarray(base.stop_times_s).copy()
+    stops[10] += 0.25
+    data = TrajectoryEvidenceData(
+        dataset_id=base.dataset_id,
+        states=base.states,
+        trajectory_ids=base.trajectory_ids,
+        start_times_s=base.start_times_s,
+        stop_times_s=stops,
+        metadata=base.metadata,
+    )
+    with pytest.raises(ValueError, match="expected_window_seconds"):
+        _authority(data)
+
+
+def test_unexpectedly_dense_fixed_step_windows_fail_closed() -> None:
+    base = _fixture()
+    starts = np.asarray(base.start_times_s).copy()
+    stops = np.asarray(base.stop_times_s).copy()
+    # Move one selected fit window earlier so the start lattice becomes denser than
+    # the declared one-second stride without duplicating a timestamp.
+    starts[4] = 3.5
+    stops[4] = 4.5
+    data = TrajectoryEvidenceData(
+        dataset_id=base.dataset_id,
+        states=base.states,
+        trajectory_ids=base.trajectory_ids,
+        start_times_s=starts,
+        stop_times_s=stops,
+        metadata=base.metadata,
+    )
+    with pytest.raises(ValueError, match="smaller than declared step"):
+        _authority(data)
+
+
+def test_irregular_timing_is_deliberately_unsupported_in_v1() -> None:
+    data = _fixture()
+    with pytest.raises(ValueError, match="time_step_policy='fixed'"):
+        TrajectoryEvidenceAuthority.from_data(
+            data,
+            case_id="irregular",
+            fit_indices=np.arange(0, 6),
+            calibration_indices=[6, 7],
+            evaluation_indices=[9, 10, 11],
+            representation_fit_indices=[0, 1, 2],
+            latent_dimension=3,
+            time_step_policy="native_irregular",  # type: ignore[arg-type]
+            expected_window_seconds=1.0,
+            expected_step_seconds=1.0,
+            purge_seconds=1.0,
+        )
+
+
 def _write_descriptor(root: Path, *, states_name: str = "states.npy") -> Path:
     data = _fixture()
     np.save(root / states_name, data.states)
@@ -169,6 +246,7 @@ def _write_descriptor(root: Path, *, states_name: str = "states.npy") -> Path:
         "case_id": "portable-case",
         "latent_dimension": 3,
         "time_step_policy": "fixed",
+        "expected_window_seconds": 1.0,
         "expected_step_seconds": 1.0,
         "step_tolerance_seconds": 1e-9,
         "purge_seconds": 1.0,
@@ -179,14 +257,14 @@ def _write_descriptor(root: Path, *, states_name: str = "states.npy") -> Path:
             "states": states_name,
             "trajectory_ids": "trajectory_ids.npy",
             "start_times_s": "starts.npy",
-            "stop_times_s": "stops.npy"
+            "stop_times_s": "stops.npy",
         },
         "split": {
             "fit_indices": list(range(6)),
             "calibration_indices": [6, 7],
             "evaluation_indices": [9, 10, 11],
-            "representation_fit_indices": [0, 1, 2, 3]
-        }
+            "representation_fit_indices": [0, 1, 2, 3],
+        },
     }
     path = root / "trajectory_contract.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
