@@ -66,13 +66,39 @@ The two damping constraints are solved by exact active-set enumeration. No optim
 
 This forward-difference estimator is a baseline, not an exact continuous-time likelihood. Future exact-discretization, Kalman, or state-space estimators must carry a distinct estimator identity rather than being compared as though they used the same fitting convention.
 
-## Numerically stable least squares
+## Numerically stable least squares and regularization fairness
 
-v0.9 does not form normal equations. Unregularized fits use `numpy.linalg.lstsq` directly. Positive ridge values are represented as augmented least-squares systems.
+v0.9 does not form normal equations. Unregularized fits use `numpy.linalg.lstsq` directly. The lower-level Python fitting functions also support positive ridge values through augmented least-squares systems for sensitivity analysis.
 
-The default is `ridge = 0` so the first 12-parameter versus 4-parameter comparison is not quietly shaped by incomparable regularization geometry.
+However, the **authoritative evidence-producing v0.9 task requires `ridge = 0`**.
 
-Each lane records its design rank as a basic identifiability diagnostic.
+A single numeric ridge coefficient does not impose the same prior geometry on the unconstrained `A,b` coordinates and the canonical `omega/gamma` coordinates. Allowing nonzero ridge in the official matched artifact would therefore make the comparison look matched while regularizing two different parameter spaces in incomparable ways.
+
+Accordingly:
+
+```text
+public low-level API: positive ridge permitted for sensitivity analysis
+authoritative fit-matched-dynamics stage: ridge must equal 0
+```
+
+A nonzero `--ridge` causes the evidence stage to fail before writing an output artifact.
+
+### Rank diagnostics
+
+The affine regression uses a four-column predictor design `[x, y, z, 1]`. A full-rank design therefore reports predictor rank `4`, but the three output dimensions contain 12 independently estimable affine coefficients.
+
+To avoid confusing predictor rank with coefficient-space rank, the matched artifact explicitly reports:
+
+```text
+affine_predictor_design_rank = 4
+affine_parameter_rank        = 12
+affine_parameter_count       = 12
+canonical_design_rank        = 4
+canonical_parameter_rank     = 4
+canonical_parameter_count    = 4
+```
+
+These diagnostics are not a substitute for uncertainty estimates, but they prevent a rank label from accidentally making the 12-parameter affine lane look four-dimensional.
 
 ## Evaluation
 
