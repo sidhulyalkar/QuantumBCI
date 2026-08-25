@@ -158,9 +158,9 @@ def test_evaluation_values_cannot_change_noise_hyperparameter_selection() -> Non
     assert shifted.selected_q_scale == original.selected_q_scale
     assert shifted.selected_r_scale == original.selected_r_scale
     assert shifted.base_innovation_variance == pytest.approx(original.base_innovation_variance)
-    assert [candidate.to_mapping() for candidate in shifted.calibration_candidates] == pytest.approx(
-        [candidate.to_mapping() for candidate in original.calibration_candidates]
-    )
+    assert [candidate.to_mapping() for candidate in shifted.calibration_candidates] == [
+        candidate.to_mapping() for candidate in original.calibration_candidates
+    ]
     assert shifted.kalman_evaluation_sequential.mean_nll != pytest.approx(
         original.kalman_evaluation_sequential.mean_nll
     )
