@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
+
 from quantumbci.experiments.tasks import main
 
 
@@ -87,20 +89,10 @@ def test_e002_gate_independently_rejects_missing_family_specificity(
 ) -> None:
     recovery = tmp_path / "synthetic_recovery.json"
     gate = tmp_path / "identifiability_gate.json"
-    assert main(
-        [
-            "synthetic-recovery",
-            "E002",
-            "--output",
-            str(recovery),
-        ]
-    ) == 0
+    assert main(["synthetic-recovery", "E002", "--output", str(recovery)]) == 0
     capsys.readouterr()
 
     payload = json.loads(recovery.read_text())
-    # Simulate an artifact that still claims parameter recovery but no longer rejects
-    # a stable noncanonical affine look-alike. The downstream gate must not trust only
-    # the source artifact's summary boolean.
     payload["classical_adversary"]["canonical_structure_residual"] = 0.01
     payload["classical_adversary"]["rejected_as_canonical_family"] = False
     recovery.write_text(json.dumps(payload), encoding="utf-8")
@@ -123,6 +115,75 @@ def test_e002_gate_independently_rejects_missing_family_specificity(
     assert artifact["observed"]["classical_adversary_rejected"] is False
 
 
+def _trajectory_descriptor(tmp_path: Path) -> Path:
+    states = np.asarray([[0.1 * i, np.sin(i), np.cos(i)] for i in range(12)], dtype=float)
+    ids = np.asarray(["source"] * 6 + ["target"] * 6)
+    starts = np.asarray(list(range(6)) + list(range(6)), dtype=float)
+    stops = starts + 1.0
+    np.save(tmp_path / "states.npy", states)
+    np.save(tmp_path / "ids.npy", ids)
+    np.save(tmp_path / "starts.npy", starts)
+    np.save(tmp_path / "stops.npy", stops)
+    payload = {
+        "schema_version": 1,
+        "dataset_id": "synthetic-continuous",
+        "case_id": "ci-trajectory-case",
+        "latent_dimension": 3,
+        "time_step_policy": "fixed",
+        "expected_step_seconds": 1.0,
+        "purge_seconds": 1.0,
+        "upstream_authority_fingerprint": "neuros-ci-authority",
+        "source_revisions": {"quantumbci": "ci", "neuros": "ci"},
+        "data": {
+            "states": "states.npy",
+            "trajectory_ids": "ids.npy",
+            "start_times_s": "starts.npy",
+            "stop_times_s": "stops.npy",
+        },
+        "split": {
+            "fit_indices": list(range(6)),
+            "calibration_indices": [6, 7],
+            "evaluation_indices": [9, 10, 11],
+            "representation_fit_indices": [0, 1, 2, 3],
+        },
+    }
+    descriptor = tmp_path / "trajectory_contract.json"
+    descriptor.write_text(json.dumps(payload), encoding="utf-8")
+    return descriptor
+
+
+def test_e002_trajectory_contract_stage_materializes_frozen_authority(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    descriptor = _trajectory_descriptor(tmp_path)
+    output = tmp_path / "trajectory_index.json"
+    assert main(
+        [
+            "trajectory-contract",
+            "E002",
+            "--input",
+            str(descriptor),
+            "--output",
+            str(output),
+        ]
+    ) == 0
+    stdout = json.loads(capsys.readouterr().out)
+    artifact = json.loads(output.read_text())
+    assert stdout["status"] == "pass"
+    assert artifact["artifact_role"] == "trajectory_evidence_authority"
+    assert artifact["authority"]["transition_counts"] == {
+        "fit": 5,
+        "calibration": 1,
+        "evaluation": 2,
+    }
+    assert artifact["authority"]["representation_fit_indices"] == [0, 1, 2, 3]
+    assert artifact["authority"]["purge_seconds"] == 1.0
+    assert artifact["shared_tensor_contract"]["required_for_all_model_lanes"] is True
+    assert len(artifact["shared_tensor_contract"]["data_sha256"]) == 64
+    assert len(artifact["authority"]["authority_fingerprint"]) == 16
+
+
 def test_e002_identifiability_gate_fails_closed_without_recovery_artifact(
     tmp_path: Path,
     capsys,
@@ -141,11 +202,11 @@ def test_e002_identifiability_gate_fails_closed_without_recovery_artifact(
     assert "not found" in payload["message"]
 
 
-def test_unimplemented_manifest_task_still_fails_closed(capsys) -> None:
+def test_unimplemented_manifest_tasks_still_fail_closed(capsys) -> None:
     assert main(["extract-embeddings", "E001"]) == 3
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "not_implemented"
 
-    assert main(["trajectory-contract", "E002"]) == 3
+    assert main(["fit-lindblad", "E002"]) == 3
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "not_implemented"
