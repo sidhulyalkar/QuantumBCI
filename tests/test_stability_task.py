@@ -183,6 +183,11 @@ def test_stability_task_materializes_full_chain_and_rejects_tampering(
     assert artifact["participant_icc_computed"] is False
     assert artifact["success_count"] + artifact["failure_count"] == 4
     assert artifact["success_count"] >= 1
+    assert artifact["bootstrap_coverage_sufficient"] == (
+        artifact["success_fraction"] >= artifact["minimum_success_fraction"]
+    )
+    assert artifact["stability_gate_defined"] is False
+    assert artifact["stability_gate_pass"] is None
     assert artifact["intervention_direction_evidence_required"] is True
     assert artifact["intervention_stage_eligible"] is False
     assert artifact["physical_quantum_promotion_eligible"] is False
