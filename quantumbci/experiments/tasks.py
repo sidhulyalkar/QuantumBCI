@@ -132,7 +132,7 @@ def _e002_identifiability_gate(*, input_path: Path, output: Path) -> dict[str, A
         "experiment": "E002",
         "gate": "synthetic-identifiability-and-specificity",
         "claim_class": "quantum_inspired",
-        "source_artifact": str(input_path),
+        "source_artifact_name": input_path.name,
         "criteria": {
             "median_normalized_recovery_error_max": 0.20,
             "systematic_sign_inversions_max": 0,
@@ -179,7 +179,7 @@ def _e002_trajectory_contract(*, input_path: Path, output: Path) -> dict[str, An
         "experiment": "E002",
         "artifact_role": "trajectory_evidence_authority",
         "claim_class": "quantum_inspired",
-        "descriptor": str(input_path),
+        "descriptor_name": input_path.name,
         "authority": authority.to_dict(data=data),
         "shared_tensor_contract": {
             "data_sha256": data.data_sha256,
