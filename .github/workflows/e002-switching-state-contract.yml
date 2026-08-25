@@ -49,16 +49,8 @@ jobs:
           root = Path('/tmp/e002-switching')
           rng = np.random.default_rng(113)
           transitions = np.asarray([
-              [
-                  [0.90, 0.16, 0.00],
-                  [-0.10, 0.84, 0.06],
-                  [0.03, -0.07, 0.86],
-              ],
-              [
-                  [0.73, -0.20, 0.07],
-                  [0.18, 0.78, -0.10],
-                  [-0.04, 0.13, 0.80],
-              ],
+              [[0.90, 0.16, 0.00], [-0.10, 0.84, 0.06], [0.03, -0.07, 0.86]],
+              [[0.73, -0.20, 0.07], [0.18, 0.78, -0.10], [-0.04, 0.13, 0.80]],
           ], dtype=float)
           intercepts = np.asarray([
               [0.010, -0.006, 0.004],
@@ -278,6 +270,7 @@ jobs:
           assert source == packaged
           stages = {stage['id']: stage for stage in source['stages']}
           switching = stages['fit_switching_state_control']
+          nonlinear = stages['fit_flexible_nonlinear_control']
           assert switching['depends_on'] == ['fit_probabilistic_state_space_control']
           assert switching['command'][:3] == [
               'python', '-m', 'quantumbci.experiments.switching_state_task'
@@ -292,11 +285,17 @@ jobs:
           ):
               assert required in switching['command']
           assert switching['produces'] == ['switching_state.json']
+          assert nonlinear['depends_on'] == ['fit_switching_state_control']
+          assert nonlinear['command'][:3] == [
+              'python', '-m', 'quantumbci.experiments.nonlinear_control_task'
+          ]
+          assert nonlinear['produces'] == ['nonlinear_control.json']
           assert stages['interventions']['depends_on'] == [
               'fit_matched_baseline',
               'fit_extended_classical_controls',
               'fit_probabilistic_state_space_control',
               'fit_switching_state_control',
+              'fit_flexible_nonlinear_control',
           ]
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-switching-wheel
