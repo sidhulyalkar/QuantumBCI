@@ -77,6 +77,15 @@ from .longitudinal import (
     run_longitudinal_e001_case,
 )
 from .open_system import dephasing_collapse, evolve_lindblad, lindblad_rhs
+from .probabilistic_ssm import (
+    DIRECT_GAUSSIAN_BASELINE_ID,
+    PROBABILISTIC_MODEL_ID,
+    PredictiveDensityMetrics,
+    ProbabilisticStateSpaceResult,
+    fit_base_innovation_variance,
+    score_direct_gaussian_var,
+    score_identity_observation_kalman,
+)
 from .recipes import FrozenEmbeddingRecipe, RecipeRunResult, load_recipe, run_recipe
 from .spectral import amplitude_encode, classical_fft, qft_probabilities, qft_state
 from .states import density_from_samples, l1_coherence, purity, von_neumann_entropy
@@ -96,6 +105,7 @@ __all__ = [
     "ClaimClass",
     "ClassicalControlLaneResult",
     "DIRECT_DISCRETE_ESTIMATOR_ID",
+    "DIRECT_GAUSSIAN_BASELINE_ID",
     "DISCRETE_ROLLOUT_ID",
     "DensityBenchmarkResult",
     "DensityCovarianceAudit",
@@ -112,7 +122,10 @@ __all__ = [
     "LongitudinalE001Row",
     "MatchedDynamicsBenchmarkResult",
     "MechanismCard",
+    "PROBABILISTIC_MODEL_ID",
     "PairedBootstrapSummary",
+    "PredictiveDensityMetrics",
+    "ProbabilisticStateSpaceResult",
     "QLSADiagnostics",
     "RecipeRunResult",
     "SCORE_INTEGRATOR_ID",
@@ -144,6 +157,7 @@ __all__ = [
     "export_run_ro_crate",
     "fit_affine_generator",
     "fit_affine_generator_from_trajectories",
+    "fit_base_innovation_variance",
     "fit_canonical_qubit_generator",
     "fit_diagonal_ar1",
     "fit_full_affine_var1",
@@ -167,6 +181,8 @@ __all__ = [
     "run_longitudinal_e001_case",
     "run_matched_qubit_dynamics_benchmark",
     "run_recipe",
+    "score_direct_gaussian_var",
+    "score_identity_observation_kalman",
     "simulate_canonical_bloch_trajectories",
     "trace_normalized_second_moment",
     "verify_run_artifacts",
