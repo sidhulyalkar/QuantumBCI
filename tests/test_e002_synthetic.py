@@ -60,17 +60,15 @@ def test_noncanonical_affine_lookalike_is_not_accepted_as_canonical_family() -> 
         ]
     )
     offset = np.asarray([0.10, 0.00, 0.35])
-    # Parameter projection alone looks superficially plausible.
     projected = recover_canonical_parameters(matrix, offset)
     assert projected.omega_x == pytest.approx(1.2)
     assert projected.omega_z == pytest.approx(0.8)
     assert projected.gamma_relaxation == pytest.approx(0.35)
 
-    # Whole-generator structure reveals the mismatch.
     residual = canonical_structure_residual(matrix, offset, projected)
     assert residual >= CLASSICAL_ADVERSARY_RESIDUAL_MIN
     assert residual > CANONICAL_STRUCTURE_RESIDUAL_MAX
-    assert max(np.real(np.linalg.eigvals(matrix))) < 0.0  # adversary is dynamically stable
+    assert max(np.real(np.linalg.eigvals(matrix))) < 0.0
 
 
 def test_e002_moderate_snr_recovery_gate_passes_without_overclaiming() -> None:
@@ -115,7 +113,7 @@ def test_e002_rejects_invalid_inputs() -> None:
         run_e002_synthetic_recovery_grid(noise_std=-1.0)
     with pytest.raises(ValueError, match="shape"):
         fit_affine_generator_from_trajectories(np.zeros((10, 3)), np.arange(10))
-    with pytest.raises(ValueError, match="A=\(3,3\)"):
+    with pytest.raises(ValueError, match=r"A=\(3,3\)"):
         canonical_structure_residual(
             np.zeros((2, 2)),
             np.zeros(3),
