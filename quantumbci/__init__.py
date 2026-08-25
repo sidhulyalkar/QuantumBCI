@@ -58,6 +58,11 @@ from .open_system import dephasing_collapse, evolve_lindblad, lindblad_rhs
 from .recipes import FrozenEmbeddingRecipe, RecipeRunResult, load_recipe, run_recipe
 from .spectral import amplitude_encode, classical_fft, qft_probabilities, qft_state
 from .states import density_from_samples, l1_coherence, purity, von_neumann_entropy
+from .trajectory_authority import (
+    TrajectoryEvidenceAuthority,
+    TrajectoryEvidenceData,
+    load_trajectory_contract_descriptor,
+)
 
 __all__ = [
     "BatchEquivalenceAudit",
@@ -80,6 +85,8 @@ __all__ = [
     "PairedBootstrapSummary",
     "QLSADiagnostics",
     "RecipeRunResult",
+    "TrajectoryEvidenceAuthority",
+    "TrajectoryEvidenceData",
     "affine_rhs",
     "amplitude_encode",
     "audit_density_covariance_equivalence",
@@ -107,6 +114,7 @@ __all__ = [
     "l1_coherence",
     "lindblad_rhs",
     "load_recipe",
+    "load_trajectory_contract_descriptor",
     "mechanism_card",
     "order_effect",
     "paired_participant_bootstrap",

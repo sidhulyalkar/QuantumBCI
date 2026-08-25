@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.7.0"
+version: "0.8.0"
 keywords:
   - neuroscience
   - EEG
@@ -20,4 +20,6 @@ keywords:
   - open-system dynamics
   - Lindblad
   - identifiability
+  - trajectory authority
+  - temporal leakage
   - reproducible research
