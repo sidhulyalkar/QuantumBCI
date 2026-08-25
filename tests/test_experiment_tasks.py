@@ -130,6 +130,7 @@ def _trajectory_descriptor(tmp_path: Path) -> Path:
         "case_id": "ci-trajectory-case",
         "latent_dimension": 3,
         "time_step_policy": "fixed",
+        "expected_window_seconds": 1.0,
         "expected_step_seconds": 1.0,
         "purge_seconds": 1.0,
         "upstream_authority_fingerprint": "neuros-ci-authority",
@@ -178,6 +179,7 @@ def test_e002_trajectory_contract_stage_materializes_frozen_authority(
         "evaluation": 2,
     }
     assert artifact["authority"]["representation_fit_indices"] == [0, 1, 2, 3]
+    assert artifact["authority"]["expected_window_seconds"] == 1.0
     assert artifact["authority"]["purge_seconds"] == 1.0
     assert artifact["shared_tensor_contract"]["required_for_all_model_lanes"] is True
     assert len(artifact["shared_tensor_contract"]["data_sha256"]) == 64
