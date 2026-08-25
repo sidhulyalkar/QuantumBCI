@@ -109,21 +109,31 @@ For nonlinear model selection it reports:
 
 Every requested bootstrap replicate remains in the artifact. Failed replicates retain their failure reason and remain in the denominator.
 
-## Execution success is not stability success
+## Execution, bootstrap coverage, and stability are different
 
-A valid v0.14 artifact may have:
+A valid v0.14 artifact distinguishes three ideas:
 
 ```text
 status = pass
 execution_complete = true
-stability_gate_pass = false
+bootstrap_coverage_sufficient = true | false
+stability_gate_defined = false
+stability_gate_pass = null
 ```
 
-That is intentional.
+`status = pass` means the evidence transaction executed correctly.
 
-“Pass” means the evidence transaction executed correctly. The stability gate requires the preregistered minimum successful-replicate fraction, currently `0.90` for the research manifest.
+`bootstrap_coverage_sufficient` means enough requested resamples produced estimable fits to support the reported bootstrap summaries. The research manifest currently requires a successful-replicate fraction of at least `0.90`.
 
-Failure frequency itself is evidence. It must never be hidden by dropping inconvenient bootstrap draws.
+That **is not a mechanism-stability threshold**. A model can converge on every bootstrap draw while its parameters wander wildly, change sign, or select different nonlinear configurations. v0.14 therefore reports the underlying intervals and frequencies rather than collapsing them into a universal binary “stable” verdict.
+
+A future benchmark may preregister a stability criterion for a particular dataset/task/mechanism after appropriate power and calibration work. Until then:
+
+```text
+stability_gate_defined = false
+```
+
+Failure frequency itself is still evidence. It must never be hidden by dropping inconvenient bootstrap draws.
 
 ## A single-case bootstrap is not ICC
 
@@ -163,11 +173,11 @@ A hand-edited `nonlinear_control.json` cannot become stability authority merely 
 Research defaults:
 
 ```text
-method:                  role_stratified_trajectory_block_bootstrap_v1
-seed:                    1401
-replicates:              200
+method:                   role_stratified_trajectory_block_bootstrap_v1
+seed:                     1401
+replicates:               200
 minimum success fraction: 0.90
-percentile interval:     [2.5, 97.5]
+percentile interval:      [2.5, 97.5]
 ```
 
 Each fit/calibration source draw is represented in the ledger by a SHA-256 digest.
