@@ -1,0 +1,36 @@
+name: E002 switching-state contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-e002-switching-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify switching-state adversarial kernel
+        run: |
+          python -m pytest -q tests/test_switching_dynamics.py
+
+      - name: Keep open-loop switching claims fail-closed
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('quantumbci/switching_dynamics.py').read_text(encoding='utf-8')
+          assert 'exact_open_loop_switching_forecast_complete' in source
+          assert 'open_loop_promotion_eligible' in source
+          assert 'regime_labels_mechanistically_identifiable' in source
+          PY
