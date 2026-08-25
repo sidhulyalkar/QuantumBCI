@@ -96,6 +96,7 @@ def build_stability_artifact(
         if str(payload.get(field)) != str(expected_nonlinear.get(field)):
             raise RuntimeError(f"bootstrap stability produced mismatched {field}")
 
+    coverage_sufficient = bool(payload["stability_evidence_complete"])
     return {
         **payload,
         "schema_version": 2,
@@ -110,7 +111,9 @@ def build_stability_artifact(
         "upstream_nonlinear_artifact_verified": True,
         "upstream_nonlinear_artifact_reconstructed": True,
         "execution_complete": True,
-        "stability_gate_pass": bool(payload["stability_evidence_complete"]),
+        "bootstrap_coverage_sufficient": coverage_sufficient,
+        "stability_gate_defined": False,
+        "stability_gate_pass": None,
         "predictive_adversary_ladder_complete": True,
         "intervention_direction_evidence_required": True,
         "intervention_stage_eligible": False,
@@ -118,10 +121,13 @@ def build_stability_artifact(
         "physical_quantum_promotion_eligible": False,
         "interpretation_ceiling": (
             "This artifact quantifies source-data perturbation stability after the complete "
-            "v0.9-v0.13 predictive adversary ladder. A valid artifact may still fail the "
-            "stability gate if too many bootstrap replicates fail. Single-case bootstrap "
-            "intervals are not ICC. Even strong stability does not identify a biological or "
-            "physical-quantum mechanism; intervention-direction evidence remains required."
+            "v0.9-v0.13 predictive adversary ladder. The minimum successful-replicate fraction "
+            "is a bootstrap-coverage requirement, not a mechanism-stability threshold. v0.14 "
+            "reports intervals, sign consistency, predictive-gain survival and selection "
+            "frequencies without collapsing them into a binary stable/unstable verdict. "
+            "Single-case bootstrap intervals are not ICC. Even strong stability diagnostics do "
+            "not identify a biological or physical-quantum mechanism; intervention-direction "
+            "evidence remains required."
         ),
     }
 
