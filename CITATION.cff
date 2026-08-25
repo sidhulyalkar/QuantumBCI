@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.6.1"
+version: "0.7.0"
 keywords:
   - neuroscience
   - EEG
@@ -17,6 +17,7 @@ keywords:
   - mechanistic interpretability
   - mathematical equivalence
   - longitudinal evaluation
-  - Kumar2024
-  - MOABB
+  - open-system dynamics
+  - Lindblad
+  - identifiability
   - reproducible research

@@ -72,3 +72,52 @@ def test_e001_audit_cli_runs_control_gauntlet_and_writes_output(tmp_path: Path, 
     assert "log_covariance" in payload["metrics"]
     assert "pca_flattened" in payload["metrics"]
     assert payload["strongest_classical_control"] in payload["metrics"]
+
+
+def test_dynamics_audit_cli_exposes_affine_equivalence_and_gauges(tmp_path: Path, capsys) -> None:
+    output = tmp_path / "dynamics.json"
+    assert main(
+        [
+            "dynamics",
+            "--omega-x",
+            "1.2",
+            "--omega-z",
+            "0.8",
+            "--gamma-dephasing",
+            "0.25",
+            "--gamma-relaxation",
+            "0.35",
+            "--output",
+            str(output),
+            "--json",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert output.is_file()
+    assert payload["affine_equivalence"]["equivalent_within_tolerance"] is True
+    assert payload["gauge_nonidentifiability"]["equivalent_within_tolerance"] is True
+    assert payload["dynamical_information_novel"] is False
+    assert payload["gauge_nonidentifiability"]["collapse_unitary_mixing_unidentifiable"] is True
+
+
+def test_e002_synthetic_cli_materializes_recovery_evidence(tmp_path: Path, capsys) -> None:
+    output = tmp_path / "synthetic.json"
+    assert main(
+        [
+            "e002-synthetic",
+            "--seed",
+            "2027",
+            "--noise-std",
+            "0.003",
+            "--output",
+            str(output),
+            "--json",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert output.is_file()
+    assert payload["synthetic_identifiability_gate_pass"] is True
+    assert payload["median_normalized_recovery_error"] <= 0.20
+    assert payload["systematic_sign_inversions"] == 0
+    assert payload["dynamical_information_novel"] is False
+    assert payload["physical_quantum_promotion_eligible"] is False
