@@ -1,0 +1,36 @@
+name: E002 nonlinear control contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-e002-nonlinear-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify nonlinear positive/null adversaries
+        run: |
+          python -m pytest -q tests/test_nonlinear_dynamics.py
+
+      - name: Keep nonlinear uncertainty rollout claims fail-closed
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('quantumbci/nonlinear_dynamics.py').read_text(encoding='utf-8')
+          assert 'nonlinear_uncertainty_rollout_complete' in source
+          assert 'rollout_likelihood_promotion_eligible' in source
+          assert 'evaluation_used_for_model_selection' in source
+          PY
