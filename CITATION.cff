@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.10.0"
+version: "0.11.0"
 keywords:
   - neuroscience
   - EEG
@@ -25,5 +25,8 @@ keywords:
   - classical controls
   - VAR
   - state-space models
+  - Kalman filtering
+  - predictive likelihood
+  - uncertainty calibration
   - temporal leakage
   - reproducible research

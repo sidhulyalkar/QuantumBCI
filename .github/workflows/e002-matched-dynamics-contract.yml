@@ -218,6 +218,7 @@ jobs:
           stages = {stage['id']: stage for stage in source['stages']}
           matched = stages['fit_matched_baseline']
           controls = stages['fit_extended_classical_controls']
+          probabilistic = stages['fit_probabilistic_state_space_control']
           assert matched['depends_on'] == ['trajectory_contract']
           assert 'fit-matched-dynamics' in matched['command']
           assert matched['command'][-1] == '0'
@@ -232,8 +233,14 @@ jobs:
               '--output', 'classical_controls.json',
           ):
               assert required in controls['command']
+          assert probabilistic['depends_on'] == ['fit_extended_classical_controls']
+          assert probabilistic['command'][:3] == [
+              'python', '-m', 'quantumbci.experiments.probabilistic_ssm_task'
+          ]
           assert stages['interventions']['depends_on'] == [
-              'fit_matched_baseline', 'fit_extended_classical_controls'
+              'fit_matched_baseline',
+              'fit_extended_classical_controls',
+              'fit_probabilistic_state_space_control',
           ]
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-matched-wheel

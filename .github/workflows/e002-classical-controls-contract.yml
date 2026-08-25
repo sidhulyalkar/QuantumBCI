@@ -203,18 +203,27 @@ jobs:
           assert source == packaged
           stages = {stage['id']: stage for stage in source['stages']}
           control_stage = stages['fit_extended_classical_controls']
+          probabilistic = stages['fit_probabilistic_state_space_control']
           assert control_stage['depends_on'] == ['fit_matched_baseline']
           assert 'quantumbci.experiments.classical_controls_task' in control_stage['command']
           assert control_stage['produces'] == ['classical_controls.json']
-          assert stages['interventions']['depends_on'] == ['fit_matched_baseline', 'fit_extended_classical_controls']
+          assert probabilistic['depends_on'] == ['fit_extended_classical_controls']
+          assert 'quantumbci.experiments.probabilistic_ssm_task' in probabilistic['command']
+          assert stages['interventions']['depends_on'] == [
+              'fit_matched_baseline',
+              'fit_extended_classical_controls',
+              'fit_probabilistic_state_space_control',
+          ]
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-controls-wheel
           python - <<'PY'
+          from importlib.metadata import version
           from pathlib import Path
           import zipfile
           wheels = list(Path('/tmp/quantumbci-controls-wheel').glob('quantum_bci-*.whl'))
           assert len(wheels) == 1, wheels
-          assert '0.10.0' in wheels[0].name
+          installed_version = version('quantum-bci')
+          assert f'quantum_bci-{installed_version}-' in wheels[0].name
           with zipfile.ZipFile(wheels[0]) as archive:
               names = set(archive.namelist())
           expected = {
