@@ -1,0 +1,175 @@
+name: BMRB causal necessity contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-bmrb-causal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify causal, provenance and chain-of-custody kernels
+        run: |
+          python -m pytest -q \
+            tests/test_neuros_mechint_artifacts.py \
+            tests/test_matched_recovery.py \
+            tests/test_causal_recapitulation.py \
+            tests/test_bmrb_causal.py \
+            tests/test_bmrb.py \
+            tests/test_recapitulation.py
+
+      - name: Qualify installed v0.16 public API
+        run: |
+          quantumbci-bmrb --help
+          quantumbci-bmrb causal --help
+          python - <<'PY'
+          from importlib.metadata import version
+          import quantumbci
+
+          assert version('quantum-bci') == '0.16.0'
+          assert quantumbci.CAUSAL_EVIDENCE_METHOD_ID == 'participant_balanced_causal_necessity_v1'
+          assert quantumbci.MATCHED_RECOVERY_SCHEMA == 'quantumbci.matched-classical-recovery.v1'
+          assert quantumbci.BMRB_DYNAMICS_ARTIFACT_SCHEMA == 2
+          assert callable(quantumbci.build_bmrb_causal_bundle)
+          assert callable(quantumbci.write_bmrb_causal_bundle)
+          assert callable(quantumbci.build_matched_classical_recovery_evidence)
+          assert callable(quantumbci.verify_bmrb_dynamics_mapping)
+          assert callable(quantumbci.verify_dose_response_result)
+          assert callable(quantumbci.verify_evidence_pack_result)
+          PY
+
+      - name: Keep causal and physical claim ceilings explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          causal = Path('quantumbci/causal_recapitulation.py').read_text(encoding='utf-8')
+          recovery = Path('quantumbci/matched_recovery.py').read_text(encoding='utf-8')
+          bmrb = Path('quantumbci/bmrb_causal.py').read_text(encoding='utf-8')
+          assert 'scientific_criteria_passed' in causal
+          assert 'promotion_eligible' in causal
+          assert 'physical_quantum_promotion_eligible' in causal
+          assert 'classical_recovery_fraction' in recovery
+          assert 'ablation_loss' in recovery
+          assert 'upstream_artifact_fingerprint' in bmrb
+          assert 'matched_recovery_sha256' in bmrb
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf /tmp/quantumbci-bmrb-causal-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-bmrb-causal-wheel
+          python - <<'PY'
+          from importlib.metadata import version
+          from pathlib import Path
+          import zipfile
+
+          wheels = list(Path('/tmp/quantumbci-bmrb-causal-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          installed_version = version('quantum-bci')
+          assert f'quantum_bci-{installed_version}-' in wheels[0].name
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          expected = {
+              'quantumbci/bmrb.py',
+              'quantumbci/bmrb_causal.py',
+              'quantumbci/bmrb_cli.py',
+              'quantumbci/causal_recapitulation.py',
+              'quantumbci/matched_recovery.py',
+              'quantumbci/neuros_mechint_artifacts.py',
+              'quantumbci/recapitulation.py',
+          }
+          missing = sorted(expected - names)
+          assert not missing, f'v0.16 causal modules missing from wheel: {missing}'
+          PY
+
+  neuros-mechint-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout QuantumBCI
+        uses: actions/checkout@v4
+      - name: Checkout pinned neurOS mechanistic contracts
+        uses: actions/checkout@v4
+        with:
+          repository: sidhulyalkar/neurOS-v1
+          ref: 8712e245037e7b238da22a1b9e3d9631b5226c88
+          path: _deps/neuros-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - name: Install pinned neurOS and neuros-mechint contracts
+        run: |
+          python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-mechint
+          python -m pip install -e '.[dev]'
+      - name: Prove stable-hash parity and native dose-response compatibility
+        run: |
+          python - <<'PY'
+          from neuros_mechint.benchmarks import (
+              DoseResponseObservation,
+              DoseResponsePolicy,
+              DoseResponseSpec,
+              InterventionManifoldAssumption,
+              InterventionManifoldKind,
+              analyze_dose_response,
+              serialize_dose_response,
+          )
+          from neuros_mechint.core.manifest import stable_hash
+          from quantumbci.neuros_mechint_artifacts import (
+              neuros_mechint_stable_hash,
+              verify_dose_response_result,
+          )
+
+          nested = {
+              'bool': True,
+              'float': 0.125,
+              'int': 7,
+              'none': None,
+              'sequence': ['a', 2, {'x': -0.5}],
+          }
+          assert neuros_mechint_stable_hash(nested) == stable_hash(nested)
+
+          spec = DoseResponseSpec(
+              study_id='qbc-v016-ci',
+              intervention_id='erase_candidate_information',
+              expected_direction=1,
+              manifold=InterventionManifoldAssumption(
+                  kind=InterventionManifoldKind.CONDITIONAL_RESAMPLE,
+                  description='CI discovery-fitted donor manifold',
+                  donor_pool_id='ci-donors',
+                  fitted_on_partition_id='discovery',
+                  expected_in_manifold=True,
+              ),
+              policy=DoseResponsePolicy(
+                  min_doses=3,
+                  min_units=3,
+                  min_monotonic_fraction=0.75,
+                  min_endpoint_effect=0.1,
+              ),
+          )
+          observations = []
+          for unit in ('p1', 'p2', 'p3'):
+              for dose, metric in ((0.0, 0.0), (0.5, 0.4), (1.0, 0.8)):
+                  observations.append(
+                      DoseResponseObservation(unit_id=unit, dose=dose, metric=metric)
+                  )
+          native = serialize_dose_response(analyze_dose_response(spec, observations))
+          verified = verify_dose_response_result(native)
+          assert verified['passed'] is True
+          assert verified['endpoint_effect'] > 0.0
+          assert verified['study_fingerprint'] == native['study_fingerprint']
+          PY
