@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .bmrb_validation import run_bmrb_validation_suite
+from .bmrb_validation_stress import run_bmrb_validation_stress_suite
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -23,9 +24,17 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=1901)
     parser.add_argument("--output", type=Path)
     parser.add_argument(
+        "--extended",
+        action="store_true",
+        help=(
+            "Also run weak-rule traps, invertible-coordinate, heterogeneity, and repeated-session "
+            "stress scenarios."
+        ),
+    )
+    parser.add_argument(
         "--require-qualified",
         action="store_true",
-        help="Exit non-zero when the known-truth suite does not satisfy its software QA contract.",
+        help="Exit non-zero when the requested known-truth validation does not qualify.",
     )
     return parser
 
@@ -38,6 +47,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         participants=args.participants,
         bootstrap_resamples=args.bootstrap_resamples,
     )
+    if args.extended:
+        stress = run_bmrb_validation_stress_suite(
+            replicates=args.replicates,
+            seed=args.seed + 1000,
+            participants=args.participants,
+            bootstrap_resamples=args.bootstrap_resamples,
+        )
+        result["stress_suite"] = stress
+        result["qualified"] = bool(result["qualified"] and stress["qualified"])
+
     text = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output is None:
         print(text, end="")
