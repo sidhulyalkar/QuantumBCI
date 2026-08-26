@@ -1,6 +1,6 @@
 cff-version: 1.2.0
-message: "If you use QuantumBCI in research, please cite the software and the specific dataset/model sources used by your study."
-title: "QuantumBCI: a falsifiable workbench for quantum-structured neural mechanism research"
+message: "If you use QuantumBCI in research, please cite the software and the specific dataset, model, and preregistration sources used by your study."
+title: "QuantumBCI: a falsifiable workbench for neural mechanism research"
 type: software
 authors:
   - family-names: Hulyalkar
@@ -8,35 +8,28 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.14.0"
+version: "0.18.0"
 keywords:
   - neuroscience
   - EEG
   - BCI
   - quantum-inspired
   - mechanistic interpretability
+  - neural representation
+  - foundation models
   - mathematical equivalence
+  - preregistration
+  - confirmatory analysis
   - longitudinal evaluation
+  - participant-level inference
   - open-system dynamics
   - Lindblad
   - identifiability
   - trajectory authority
-  - matched dynamics
   - classical controls
-  - VAR
   - state-space models
-  - Kalman filtering
-  - predictive likelihood
-  - uncertainty calibration
   - switching-state models
-  - hidden Markov models
-  - regime switching
   - nonlinear dynamics
-  - random Fourier features
-  - kernel approximation
-  - block bootstrap
-  - stability analysis
-  - parameter reliability
-  - model selection stability
-  - temporal leakage
+  - bootstrap uncertainty
   - reproducible research
+  - RO-Crate
