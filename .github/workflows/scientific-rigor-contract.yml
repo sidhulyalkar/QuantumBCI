@@ -31,7 +31,7 @@ jobs:
             tests/test_representation_conservation.py \
             tests/test_longitudinal.py
 
-      - name: Static-check new scientific surfaces
+      - name: Static-check confirmatory scientific surfaces
         run: |
           python -m ruff check \
             quantumbci/preregistration.py \
@@ -44,7 +44,7 @@ jobs:
             tests/test_confirmatory_artifacts.py \
             --select E9,F
 
-      - name: Qualify installed v0.18 CLI and policy fingerprinting
+      - name: Qualify installed confirmatory CLI and policy fingerprinting
         run: |
           quantumbci-confirmatory --version
           cat > /tmp/qbc-policy.json <<'JSON'
@@ -99,19 +99,25 @@ jobs:
           from importlib.metadata import version
           from pathlib import Path
           import re
-          assert version('quantum-bci') == '0.18.0'
+          from packaging.version import Version
+
+          installed = version('quantum-bci')
+          assert Version(installed) >= Version('0.18.0')
           citation = Path('CITATION.cff').read_text(encoding='utf-8')
-          assert re.search(r'^version:\s*["\x27]?0\.18\.0["\x27]?\s*$', citation, re.MULTILINE)
+          match = re.search(r'^version:\s*["\x27]?([^"\x27\s]+)["\x27]?\s*$', citation, re.MULTILINE)
+          assert match, 'CITATION.cff version missing'
+          assert match.group(1) == installed
           assert Path('docs/PUBLISHABILITY_AUDIT.md').is_file()
           assert Path('docs/CONFIRMATORY_REPRESENTATION.md').is_file()
           PY
-          rm -rf /tmp/qbc-v018-wheel
-          python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-v018-wheel
+          rm -rf /tmp/qbc-confirmatory-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-confirmatory-wheel
           python - <<'PY'
           from pathlib import Path
           import zipfile
-          wheel = next(Path('/tmp/qbc-v018-wheel').glob('quantum_bci-0.18.0-*.whl'))
-          with zipfile.ZipFile(wheel) as archive:
+          wheels = list(Path('/tmp/qbc-confirmatory-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          with zipfile.ZipFile(wheels[0]) as archive:
               names = set(archive.namelist())
           expected = {
               'quantumbci/preregistration.py',
