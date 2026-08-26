@@ -12,8 +12,8 @@ against; they are not proposed scientific baselines.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 import numpy as np
