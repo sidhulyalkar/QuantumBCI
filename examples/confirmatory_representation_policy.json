@@ -1,0 +1,20 @@
+{
+  "policy_id": "replace-with-study-policy-id",
+  "reference_representation_id": "raw",
+  "primary_calibration_per_class": 10,
+  "primary_classical_control": "normalized_covariance",
+  "min_participants": 18,
+  "min_representations": 3,
+  "min_representation_families": 2,
+  "min_candidate_advantage": 0.01,
+  "min_ablation_necessity": 0.02,
+  "min_reference_positive_fraction": 0.67,
+  "min_all_lane_positive_fraction": 0.67,
+  "min_direction_match_fraction": 0.67,
+  "min_ablation_direction_match_fraction": 0.67,
+  "min_information_novel_representation_fraction": 1.0,
+  "sample_size_rationale": "EXAMPLE ONLY: replace every numerical threshold and this rationale with values justified and registered for the actual study.",
+  "inference_seed": 1801,
+  "bootstrap_resamples": 5000,
+  "preregistration": null
+}
