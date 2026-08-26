@@ -6,10 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from quantumbci.confirmatory_representation import (
-    ConfirmatoryRepresentationPolicy,
-    load_confirmatory_representation_manifest,
-)
+from quantumbci.confirmatory_representation import load_confirmatory_representation_manifest
 
 
 def _write(path: Path, payload: object) -> None:
