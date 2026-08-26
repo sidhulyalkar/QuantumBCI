@@ -99,6 +99,26 @@ def _case(example: str, split: str, baseline: str, *, joint: float) -> dict:
     }
 
 
+def _pack_identity(result: dict) -> dict:
+    keys = (
+        "candidate",
+        "candidate_cases",
+        "discovery_example_ids",
+        "faithfulness_policy",
+        "magnitude_candidate",
+        "magnitude_cases",
+        "mean_ablation_references",
+        "policy",
+        "spec",
+        "validation_example_ids",
+    )
+    return {key: result[key] for key in keys}
+
+
+def _refingerprint_pack(result: dict) -> None:
+    result["study_fingerprint"] = neuros_mechint_stable_hash(_pack_identity(result))
+
+
 def make_evidence_pack() -> dict:
     candidate_cases = [
         _case("d1", "discovery", "zero", joint=0.86),
@@ -198,6 +218,19 @@ def test_dose_response_fingerprint_rejects_changed_endpoint() -> None:
         verify_dose_response_result(artifact)
 
 
+def test_dose_response_rejects_fingerprint_valid_nonboolean_passed() -> None:
+    artifact = make_dose_response()
+    artifact["passed"] = "false"
+    scientific = {
+        key: value
+        for key, value in artifact.items()
+        if key not in {"schema_version", "study_fingerprint"}
+    }
+    artifact["study_fingerprint"] = neuros_mechint_stable_hash(scientific)
+    with pytest.raises(TypeError, match="JSON boolean"):
+        verify_dose_response_result(artifact)
+
+
 def test_evidence_pack_derives_validation_from_fingerprint_bound_cases() -> None:
     artifact = make_evidence_pack()
     result = verify_evidence_pack_result(artifact)
@@ -228,4 +261,35 @@ def test_evidence_pack_rejects_tampered_promotion_summary() -> None:
     artifact = make_evidence_pack()
     artifact["promotion"]["passed"] = False
     with pytest.raises(ValueError, match="promotion summary mismatch"):
+        verify_evidence_pack_result(artifact)
+
+
+def test_evidence_pack_rejects_fingerprint_valid_string_case_valid_flag() -> None:
+    artifact = make_evidence_pack()
+    artifact["candidate_cases"][2]["valid"] = "false"
+    _refingerprint_pack(artifact)
+    with pytest.raises(TypeError, match="case\[2\]\.valid.*JSON boolean"):
+        verify_evidence_pack_result(artifact)
+
+
+def test_evidence_pack_rejects_fingerprint_valid_integer_report_passed() -> None:
+    artifact = make_evidence_pack()
+    artifact["candidate_cases"][2]["report"]["passed"] = 1
+    _refingerprint_pack(artifact)
+    with pytest.raises(TypeError, match="report\.passed.*JSON boolean"):
+        verify_evidence_pack_result(artifact)
+
+
+def test_evidence_pack_rejects_fingerprint_valid_string_policy_flag() -> None:
+    artifact = make_evidence_pack()
+    artifact["policy"]["require_all_cases_valid"] = "false"
+    _refingerprint_pack(artifact)
+    with pytest.raises(TypeError, match="require_all_cases_valid.*JSON boolean"):
+        verify_evidence_pack_result(artifact)
+
+
+def test_evidence_pack_rejects_nonboolean_unbound_promotion_flag() -> None:
+    artifact = make_evidence_pack()
+    artifact["promotion"]["passed"] = "true"
+    with pytest.raises(TypeError, match="promotion\.passed.*JSON boolean"):
         verify_evidence_pack_result(artifact)
