@@ -27,6 +27,7 @@ jobs:
             tests/test_neuros_mechint_artifacts.py \
             tests/test_matched_recovery.py \
             tests/test_causal_recapitulation.py \
+            tests/test_causal_api_strictness.py \
             tests/test_bmrb_causal.py \
             tests/test_bmrb.py \
             tests/test_recapitulation.py
@@ -49,6 +50,52 @@ jobs:
           assert callable(quantumbci.verify_bmrb_dynamics_mapping)
           assert callable(quantumbci.verify_dose_response_result)
           assert callable(quantumbci.verify_evidence_pack_result)
+          PY
+
+      - name: Exercise installed BMRB dynamics and causal commands end to end
+        run: |
+          rm -rf /tmp/quantumbci-bmrb-causal-cli
+          python scripts/build_bmrb_causal_ci_fixture.py /tmp/quantumbci-bmrb-causal-cli
+          cd /tmp/quantumbci-bmrb-causal-cli
+          quantumbci-bmrb dynamics dynamics-cases.json \
+            --output-dir upstream \
+            --resamples 100 \
+            --seed 1501
+          quantumbci-bmrb causal causal-manifest.json \
+            --output-dir causal
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import quantumbci
+
+          upstream = json.loads(Path('upstream/bmrb_dynamics.json').read_text())
+          causal = json.loads(Path('causal/bmrb_causal.json').read_text())
+
+          assert upstream['schema_version'] == 2
+          assert upstream['source_fingerprint']
+          assert upstream['artifact_fingerprint']
+          quantumbci.verify_bmrb_dynamics_mapping(upstream)
+
+          assert causal['artifact_role'] == 'bmrb_causal_bundle'
+          assert causal['upstream_source_fingerprint'] == upstream['source_fingerprint']
+          assert causal['upstream_artifact_fingerprint'] == upstream['artifact_fingerprint']
+          assert causal['causal_evidence']['scientific_criteria_passed'] is True
+          assert causal['causal_evidence']['promotion_eligible'] is True
+          assert causal['causal_evidence']['participant_count'] == 3
+          assert causal['causal_evidence']['mean_classical_recovery_fraction'] < 0.25
+
+          profile = causal['mechanism_profile']
+          # The source E002 fixture is already falsified by its matched predictive controls.
+          # Later causal evidence is valid, but it cannot erase or jump that earlier failure.
+          assert profile['first_failing_gate'] == 'matched_classical_adversaries'
+          assert profile['promotion_ceiling'] == 'descriptive'
+          causal_gate = next(
+              gate for gate in profile['gates']
+              if gate['id'] == 'causal_intervention_and_ablation'
+          )
+          assert causal_gate['status'] == 'characterized'
+          assert causal['physical_quantum_promotion_eligible'] is False
+          assert Path('causal/report.html').stat().st_size > 0
           PY
 
       - name: Keep causal and physical claim ceilings explicit
