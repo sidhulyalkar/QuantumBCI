@@ -9,7 +9,8 @@ single model. QuantumBCI combines three surfaces:
 
 neuros-mechint artifacts remain the authority for their own intervention policies.
 QuantumBCI verifies their versioned scientific fingerprints without requiring
-PyTorch at runtime, then adds BMRB-specific participant replication and promotion
+PyTorch at runtime, recomputes the held-out faithfulness summary from fingerprint-
+bound cases, then adds BMRB-specific participant replication and promotion
 discipline.
 """
 
@@ -25,6 +26,7 @@ import numpy as np
 from .neuros_mechint_artifacts import (
     DOSE_RESPONSE_SCHEMA,
     EVIDENCE_PACK_SCHEMA,
+    derive_evidence_pack_validation,
     verify_dose_response_result,
     verify_evidence_pack_result,
 )
@@ -63,6 +65,12 @@ def _fraction(name: str, value: Any, *, allow_above_one: bool = False) -> float:
     return number
 
 
+def _json_bool(name: str, value: Any) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{name} must be a JSON boolean")
+    return value
+
+
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -73,14 +81,7 @@ def _fingerprint(domain: bytes, value: Any) -> str:
 
 @dataclass(frozen=True)
 class MatchedClassicalRecovery:
-    """Recovery attempt after candidate-mechanism ablation.
-
-    ``classical_recovery_fraction`` is the fraction of candidate ablation loss restored
-    by the strongest matched classical alternative under the same evidence/information
-    budget. Values above 1 are allowed and mean the control recovered more than the
-    candidate's measured loss. Negative recovery is prohibited; worsening controls
-    should be recorded as zero recovery plus metadata in the producing study.
-    """
+    """Verified matched-classical recovery summary used by the causal evaluator."""
 
     classical_model_id: str
     classical_recovery_fraction: float
@@ -158,6 +159,10 @@ class CausalCaseEvidence:
             "faithfulness_source_fingerprint",
         ):
             _required_text(name, getattr(self, name))
+        if not isinstance(self.dose_response_passed, bool):
+            raise TypeError("dose_response_passed must be a boolean")
+        if not isinstance(self.faithfulness_passed, bool):
+            raise TypeError("faithfulness_passed must be a boolean")
         object.__setattr__(
             self,
             "oriented_endpoint_effect",
@@ -201,11 +206,11 @@ class CausalCaseEvidence:
             "case_id": self.case_id,
             "mechanism_id": self.mechanism_id,
             "intervention_id": self.intervention_id,
-            "dose_response_passed": bool(self.dose_response_passed),
-            "direction_matched": bool(self.direction_matched),
+            "dose_response_passed": self.dose_response_passed,
+            "direction_matched": self.direction_matched,
             "oriented_endpoint_effect": float(self.oriented_endpoint_effect),
             "mean_monotonic_fraction": float(self.mean_monotonic_fraction),
-            "faithfulness_passed": bool(self.faithfulness_passed),
+            "faithfulness_passed": self.faithfulness_passed,
             "sufficiency_fraction": float(self.sufficiency_fraction),
             "necessity_fraction": float(self.necessity_fraction),
             "joint_random_percentile": float(self.joint_random_percentile),
@@ -218,11 +223,7 @@ class CausalCaseEvidence:
 
 @dataclass(frozen=True)
 class CausalNecessityPolicy:
-    """Explicit BMRB causal promotion policy.
-
-    ``preregistered`` is intentionally part of the scientific contract. A policy can
-    evaluate evidence when false, but it cannot authorize causal promotion.
-    """
+    """Explicit causal promotion policy; preregistration is part of the contract."""
 
     policy_id: str
     preregistered: bool
@@ -236,6 +237,7 @@ class CausalNecessityPolicy:
 
     def __post_init__(self) -> None:
         _required_text("policy_id", self.policy_id)
+        _json_bool("preregistered", self.preregistered)
         if self.min_participants < 2:
             raise ValueError("min_participants must be at least 2")
         for name in (
@@ -275,15 +277,11 @@ class CausalNecessityPolicy:
     def to_mapping(self) -> dict[str, Any]:
         return {
             "policy_id": self.policy_id,
-            "preregistered": bool(self.preregistered),
+            "preregistered": self.preregistered,
             "min_participants": int(self.min_participants),
             "min_direction_match_fraction": float(self.min_direction_match_fraction),
-            "min_dose_response_pass_fraction": float(
-                self.min_dose_response_pass_fraction
-            ),
-            "min_faithfulness_pass_fraction": float(
-                self.min_faithfulness_pass_fraction
-            ),
+            "min_dose_response_pass_fraction": float(self.min_dose_response_pass_fraction),
+            "min_faithfulness_pass_fraction": float(self.min_faithfulness_pass_fraction),
             "min_mean_necessity_fraction": float(self.min_mean_necessity_fraction),
             "min_mean_joint_random_percentile": float(
                 self.min_mean_joint_random_percentile
@@ -298,7 +296,9 @@ class CausalNecessityPolicy:
     def from_mapping(cls, payload: Mapping[str, Any]) -> "CausalNecessityPolicy":
         return cls(
             policy_id=_required_text("policy.policy_id", payload.get("policy_id")),
-            preregistered=bool(payload.get("preregistered", False)),
+            preregistered=_json_bool(
+                "policy.preregistered", payload.get("preregistered", False)
+            ),
             min_participants=int(payload.get("min_participants", 3)),
             min_direction_match_fraction=float(
                 payload.get("min_direction_match_fraction", 0.80)
@@ -373,7 +373,7 @@ class CausalNecessityResult:
 
     @property
     def promotion_eligible(self) -> bool:
-        return bool(self.policy.preregistered and self.scientific_criteria_passed)
+        return self.policy.preregistered and self.scientific_criteria_passed
 
     def to_mapping(self) -> dict[str, Any]:
         return {
@@ -394,8 +394,8 @@ class CausalNecessityResult:
             "mean_classical_recovery_fraction": float(
                 self.mean_classical_recovery_fraction
             ),
-            "scientific_criteria_passed": bool(self.scientific_criteria_passed),
-            "promotion_eligible": bool(self.promotion_eligible),
+            "scientific_criteria_passed": self.scientific_criteria_passed,
+            "promotion_eligible": self.promotion_eligible,
             "reasons": list(self.reasons),
             "source_fingerprint": self.source_fingerprint,
             "participants": [item.to_mapping() for item in self.participants],
@@ -420,7 +420,7 @@ def causal_case_from_neuros_mechint(
     faithfulness: Mapping[str, Any],
     matched_recovery: MatchedClassicalRecovery,
 ) -> CausalCaseEvidence:
-    """Adapt fingerprint-verified neuros-mechint scientific results into one BMRB case."""
+    """Adapt fingerprint-verified neuros-mechint evidence into one BMRB causal case."""
 
     dose = verify_dose_response_result(dose_response)
     dose_spec = dose.get("spec")
@@ -432,25 +432,11 @@ def causal_case_from_neuros_mechint(
     expected_direction = int(dose_spec.get("expected_direction", 0))
     if expected_direction not in {-1, 1}:
         raise ValueError("dose-response expected_direction must be -1 or 1")
-    endpoint_effect = _finite("endpoint_effect", dose.get("endpoint_effect"))
-    # neuros-mechint serializes endpoint_effect already oriented by expected_direction.
-    monotonic = _fraction(
-        "mean_monotonic_fraction", dose.get("mean_monotonic_fraction")
-    )
-    dose_fp = _required_text(
-        "dose study_fingerprint", dose.get("study_fingerprint")
-    )
+    if not isinstance(dose.get("passed"), bool):
+        raise TypeError("dose-response passed must be a JSON boolean")
 
     pack = verify_evidence_pack_result(faithfulness)
-    validation = pack.get("validation_aggregate")
-    promotion = pack.get("promotion")
-    if not isinstance(validation, Mapping) or not isinstance(promotion, Mapping):
-        raise ValueError("evidence pack is missing validation_aggregate or promotion")
-    joint_random = validation.get("mean_joint_random_percentile")
-    if joint_random is None:
-        raise ValueError(
-            "evidence pack validation joint random percentile is unavailable"
-        )
+    validation = derive_evidence_pack_validation(pack)
     pack_fp = _required_text(
         "faithfulness study_fingerprint", pack.get("study_fingerprint")
     )
@@ -461,21 +447,24 @@ def causal_case_from_neuros_mechint(
         case_id=_required_text("case_id", case_id),
         mechanism_id=_required_text("mechanism_id", mechanism_id),
         intervention_id=intervention_id,
-        dose_response_passed=bool(dose.get("passed", False)),
-        oriented_endpoint_effect=endpoint_effect,
-        mean_monotonic_fraction=monotonic,
-        faithfulness_passed=bool(promotion.get("passed", False)),
+        dose_response_passed=dose["passed"],
+        oriented_endpoint_effect=_finite("endpoint_effect", dose.get("endpoint_effect")),
+        mean_monotonic_fraction=_fraction(
+            "mean_monotonic_fraction", dose.get("mean_monotonic_fraction")
+        ),
+        faithfulness_passed=bool(validation["promotion_passed"]),
         sufficiency_fraction=_finite(
-            "mean_sufficiency", validation.get("mean_sufficiency")
+            "mean_sufficiency", validation["mean_sufficiency"]
         ),
-        necessity_fraction=_finite(
-            "mean_necessity", validation.get("mean_necessity")
-        ),
+        necessity_fraction=_finite("mean_necessity", validation["mean_necessity"]),
         joint_random_percentile=_fraction(
-            "mean_joint_random_percentile", joint_random
+            "mean_joint_random_percentile",
+            validation["mean_joint_random_percentile"],
         ),
         matched_recovery=matched_recovery,
-        dose_source_fingerprint=dose_fp,
+        dose_source_fingerprint=_required_text(
+            "dose study_fingerprint", dose.get("study_fingerprint")
+        ),
         faithfulness_source_fingerprint=pack_fp,
         source_schemas=(DOSE_RESPONSE_SCHEMA, EVIDENCE_PACK_SCHEMA),
     )
@@ -533,21 +522,34 @@ def evaluate_causal_necessity(
     *,
     policy: CausalNecessityPolicy,
 ) -> CausalNecessityResult:
+    """Evaluate causal necessity with equal weighting of independent participants."""
+
     materialized = tuple(cases)
     if not materialized:
         raise ValueError("causal necessity requires case evidence")
+
     case_keys: set[tuple[str, str]] = set()
+    case_ids: set[str] = set()
     for case in materialized:
         key = (case.participant_id, case.occasion_id)
         if key in case_keys:
             raise ValueError(f"duplicate participant/occasion causal case: {key}")
+        if case.case_id in case_ids:
+            raise ValueError(f"duplicate causal case_id: {case.case_id!r}")
         case_keys.add(key)
+        case_ids.add(case.case_id)
+
     mechanism_ids = {case.mechanism_id for case in materialized}
     intervention_ids = {case.intervention_id for case in materialized}
+    information_sets = {case.matched_recovery.information_set_id for case in materialized}
     if len(mechanism_ids) != 1:
         raise ValueError("causal necessity cases must share one mechanism_id")
     if len(intervention_ids) != 1:
         raise ValueError("causal necessity cases must share one intervention_id")
+    if len(information_sets) != 1:
+        raise ValueError(
+            "causal necessity cases must share one matched-recovery information_set_id"
+        )
 
     participant_ids = tuple(sorted({case.participant_id for case in materialized}))
     participants = tuple(
@@ -642,13 +644,7 @@ def attach_causal_evidence(
     profile: MechanismNecessityProfile,
     result: CausalNecessityResult,
 ) -> MechanismNecessityProfile:
-    """Return a new BMRB profile with a causally evaluated tier.
-
-    Causal evidence can FAIL even when earlier tiers are unresolved because it is an
-    independent falsifier. It can PASS only when the policy was preregistered and the
-    upstream profile already has a contiguous PASS ceiling through repeated-case
-    evidence. Otherwise successful causal evidence remains CHARACTERIZED.
-    """
+    """Attach causal evidence without allowing a later PASS to leapfrog the ladder."""
 
     if profile.mechanism_id != result.mechanism_id:
         raise ValueError("causal result mechanism_id does not match BMRB profile")
@@ -695,7 +691,7 @@ def attach_causal_evidence(
         value=float(result.mean_necessity_fraction),
         threshold=threshold,
     )
-    gates = []
+    gates: list[EvidenceGate] = []
     replaced = False
     for gate in profile.gates:
         if gate.tier == EvidenceTier.CAUSAL_MECHANISTIC:
