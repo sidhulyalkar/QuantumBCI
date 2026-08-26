@@ -69,6 +69,12 @@ def unwrap_artifact_result(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return payload
 
 
+def _json_bool(label: str, value: Any) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{label} must be a JSON boolean")
+    return value
+
+
 def verify_dose_response_result(payload: Mapping[str, Any]) -> dict[str, Any]:
     result = dict(unwrap_artifact_result(payload))
     schema = result.get("schema_version")
@@ -85,6 +91,7 @@ def verify_dose_response_result(payload: Mapping[str, Any]) -> dict[str, Any]:
     expected = neuros_mechint_stable_hash(scientific_payload)
     if expected != fingerprint:
         raise ValueError("dose-response scientific fingerprint mismatch")
+    _json_bool("dose-response passed", result.get("passed"))
     return result
 
 
@@ -125,7 +132,7 @@ def _valid_reports(
     total = 0
     example_ids: set[str] = set()
     baselines: set[str] = set()
-    for case in cases:
+    for index, case in enumerate(cases):
         if not isinstance(case, Mapping) or str(case.get("split", "")) != split:
             continue
         total += 1
@@ -135,11 +142,13 @@ def _valid_reports(
             example_ids.add(example_id)
         if baseline:
             baselines.add(baseline)
-        if not bool(case.get("valid", False)):
+        valid = _json_bool(f"evidence-pack case[{index}].valid", case.get("valid"))
+        if not valid:
             continue
         report = case.get("report")
         if not isinstance(report, Mapping):
             raise ValueError("valid evidence-pack case is missing report")
+        _json_bool(f"evidence-pack case[{index}].report.passed", report.get("passed"))
         reports.append((case, report))
     return reports, total, example_ids, baselines
 
@@ -183,7 +192,7 @@ def derive_evidence_pack_validation(result: Mapping[str, Any]) -> dict[str, Any]
         if raw_random is None:
             raise ValueError("validation faithfulness report lacks joint_random_percentile")
         random_percentiles.append(_finite_number("joint_random_percentile", raw_random))
-        passed.append(bool(report.get("passed", False)))
+        passed.append(_json_bool("validation faithfulness report.passed", report.get("passed")))
 
     validation_pass_rate = sum(passed) / len(passed)
     valid_case_rate = len(validation) / validation_total if validation_total else 0.0
@@ -221,9 +230,12 @@ def derive_evidence_pack_validation(result: Mapping[str, Any]) -> dict[str, Any]
         "policy.min_validation_joint_advantage_vs_magnitude",
         policy.get("min_validation_joint_advantage_vs_magnitude", 0.0),
     )
-    require_all_valid = bool(policy.get("require_all_cases_valid", True))
-    require_multiple_baselines = bool(
-        policy.get("require_multiple_intervention_baselines", True)
+    require_all_valid = _json_bool(
+        "policy.require_all_cases_valid", policy.get("require_all_cases_valid", True)
+    )
+    require_multiple_baselines = _json_bool(
+        "policy.require_multiple_intervention_baselines",
+        policy.get("require_multiple_intervention_baselines", True),
     )
 
     reasons: list[str] = []
@@ -304,7 +316,10 @@ def derive_evidence_pack_validation(result: Mapping[str, Any]) -> dict[str, Any]
 
     claimed_promotion = result.get("promotion")
     if isinstance(claimed_promotion, Mapping):
-        if bool(claimed_promotion.get("passed", False)) != derived["promotion_passed"]:
+        claimed_passed = _json_bool(
+            "evidence-pack promotion.passed", claimed_promotion.get("passed")
+        )
+        if claimed_passed != derived["promotion_passed"]:
             raise ValueError("evidence-pack promotion summary mismatch")
 
     return derived
