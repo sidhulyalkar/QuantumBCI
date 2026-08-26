@@ -8,11 +8,13 @@ This is a software-and-method validation program, not a simulation of biological
 
 ## Why this exists
 
-A benchmark can look rigorous while still having bad operating characteristics. It may reject true mechanisms, admit predictive shortcuts, silently average away reversals, tolerate broken pairing, or report the wrong reason for a failure.
+A benchmark can look rigorous while still have bad operating characteristics. It may reject true mechanisms, admit predictive shortcuts, silently average away reversals, tolerate broken pairing, or report the wrong reason for a failure.
 
 `BMRB_KNOWN_TRUTH_VALIDATION_V1` therefore drives the production confirmatory representation evaluator with declared participant-level data-generating patterns and measures both the final decision and failure localization.
 
 The validation code deliberately calls `evaluate_confirmatory_representation` directly. It does not maintain a second copy of BMRB gate logic.
+
+v0.19 also includes `BMRB_KNOWN_TRUTH_STRESS_V1`, an extended stress layer that compares BMRB with deliberately weak decision rules. Those rules are diagnostic negative controls, not proposed scientific baselines.
 
 ## ADEMP structure
 
@@ -26,11 +28,14 @@ Measure whether BMRB:
 - rejects a predictive shortcut that has no ablation dependence;
 - rejects a representation-specific signature that does not conserve;
 - keeps a predeclared primary calibration budget separate from a reversed secondary budget;
+- conserves a declared mechanism across an invertible coordinate change;
+- remains well behaved under participant heterogeneity;
+- aggregates repeated noisy sessions at the participant level;
 - rejects incomplete cross-representation pairing instead of silently pooling it.
 
-### Data-generating mechanisms
+### Core data-generating mechanisms
 
-The first grid contains six stochastic scenarios plus one structural corruption test.
+The compact qualification grid contains six stochastic scenarios plus one structural corruption test.
 
 | Scenario | Known truth | Intended decision |
 | --- | --- | --- |
@@ -42,11 +47,26 @@ The first grid contains six stochastic scenarios plus one structural corruption 
 | `calibration-reversal` | primary budget is positive while a secondary budget reverses sign | pass using only the primary estimand |
 | missing-pair corruption | one exact-paired observation is deleted | reject the analysis input |
 
-Participant heterogeneity and measurement noise are generated independently under deterministic seeds. The suite uses two exactly paired representation families and participant-level inference.
+Participant heterogeneity and measurement noise are generated independently under deterministic seeds. The suite uses exactly paired representation families and participant-level inference.
+
+### Extended stress mechanisms
+
+The `--extended` surface adds six harder attacks:
+
+| Scenario | Stress question |
+| --- | --- |
+| `equivalence-null-naive-trap` | does an effect-only rule falsely accept a candidate that BMRB rejects as information-equivalent? |
+| `predictive-shortcut-naive-trap` | does an effect-only rule falsely accept predictive value without functional dependence? |
+| `calibration-reversal-naive-trap` | does averaging primary and secondary budgets erase a valid predeclared primary effect? |
+| `invertible-coordinate-positive` | can the declared effect and ablation dependence survive a coordinate-family change? |
+| `heterogeneous-shared-positive` | does participant heterogeneity preserve the correct positive decision when the mechanism is shared? |
+| `noisy-repeated-sessions-positive` | are three noisy sessions per participant summarized without converting sessions into independent participants? |
+
+The repeated-session case intentionally produces more case rows while requiring the evaluator's inference-unit count to remain the number of participants.
 
 ### Estimands
 
-For each stochastic scenario the suite records:
+For each core stochastic scenario the suite records:
 
 - scientific pass rate;
 - decision error rate relative to declared truth;
@@ -54,15 +74,28 @@ For each stochastic scenario the suite records:
 - reference-lane effect bias;
 - bootstrap interval coverage of the declared reference effect.
 
+The extended suite additionally records:
+
+- BMRB scientific pass rate;
+- pass rate of a naive primary-effect-only rule;
+- pass rate of a naive rule that averages effects across calibration budgets.
+
 The current qualification contract gates on decision behavior and failure localization. Interval coverage is reported now so it can become a calibrated performance target once the simulation grid is expanded.
 
 ### Methods compared
 
-v0.19 validates BMRB itself. It does not yet claim that BMRB dominates alternative benchmark rules. The next validation expansion should compare BMRB against deliberately weaker baselines such as raw accuracy thresholding, unpaired pooling, and one-number representation similarity rules.
+The production BMRB confirmatory evaluator is the scientific method under validation.
+
+Two deliberately weak rules serve as negative controls:
+
+1. **Primary-effect-only:** accept when mean candidate advantage exceeds the threshold, ignoring equivalence/adversary and functional-dependence gates.
+2. **Budget-averaged effect:** average candidate advantage across every calibration budget before thresholding, violating the predeclared-primary-estimand contract.
+
+The intended outcome is not merely that BMRB passes its own fixtures. The weak rules must visibly fail on cases specifically constructed to exploit their missing safeguards. v0.19 does not claim these two toy rules are the strongest competing scientific frameworks.
 
 ### Performance measures
 
-The installed software contract currently requires:
+The core software contract currently requires:
 
 - effect-null false-positive rate <= 0.10;
 - known-positive recovery >= 0.90;
@@ -71,25 +104,36 @@ The installed software contract currently requires:
 - calibration-reversal recovery >= 0.90;
 - missing exact pairs must be rejected.
 
+The extended contract additionally requires:
+
+- BMRB decision error <= 0.10 across every stress scenario;
+- the naive effect-only rule falsely accepts the equivalence and shortcut traps at least 90% of the time;
+- the naive budget-averaged rule falsely rejects the calibration-reversal trap at least 90% of the time;
+- BMRB recovers invertible-coordinate, heterogeneous, and repeated-session positives at least 90% of the time.
+
 These are **software-validation thresholds**, chosen to qualify the deterministic synthetic grid. They are not universal biological significance, power, or promotion thresholds.
 
 ## Run it
+
+Core validation:
 
 ```bash
 quantumbci-bmrb-validate --require-qualified
 ```
 
-For a faster smoke run:
+Extended validation:
 
 ```bash
 quantumbci-bmrb-validate \
+  --extended \
   --replicates 4 \
+  --participants 8 \
   --bootstrap-resamples 100 \
   --output bmrb-validation.json \
   --require-qualified
 ```
 
-The JSON output contains scenario summaries and every replicate-level decision so downstream analyses can inspect operating characteristics rather than relying on one aggregate score.
+The JSON output contains scenario summaries and every replicate-level decision so downstream analyses can inspect operating characteristics rather than relying on one aggregate score. With `--extended`, the root artifact also contains a `stress_suite` object.
 
 ## Claim boundary
 
@@ -109,12 +153,12 @@ The validation suite is an adversary for the benchmark, not a certificate of bio
 
 The highest-value additions after v0.19 are:
 
-1. explicit high-heterogeneity and missing/noisy-session operating curves;
-2. effect-size and sample-size sweeps for empirical power/type-I surfaces;
-3. naive benchmark baselines for comparative calibration;
-4. non-invertible and invertible representation transforms with known mechanism conservation;
+1. effect-size, sample-size, heterogeneity, and missingness sweeps for empirical power/type-I surfaces;
+2. calibrated interval-coverage and bias operating curves rather than single fixture values;
+3. stronger comparative methods beyond the two deliberately weak negative controls;
+4. non-invertible representation transforms and nuisance-specificity simulations;
 5. dataset-level hierarchical simulation for multi-study replication;
-6. multiplicity scenarios spanning many candidate mechanisms, layers, and metrics;
+6. multiplicity scenarios spanning candidate mechanisms, layers, tasks, and metrics;
 7. causal/interventional known-truth simulations for the BMRB causal ladder.
 
-Those additions turn validation from a contract test into a genuine methods-study simulation program.
+Those additions turn validation from a contract suite into a genuine methods-study simulation program.
