@@ -322,8 +322,6 @@ class MechanismNecessityProfile:
         )
         if len(profile.gates) != len(gates):
             raise ValueError("every mechanism profile gate must be an object")
-        # Derived fields are not authority, but when present they must agree with the
-        # reconstructed contract so stale or hand-edited reports fail closed.
         expected = profile.to_mapping()
         for key in (
             "evidence_coverage_tier",
@@ -360,6 +358,33 @@ def bmrb_dynamics_signature() -> RecapitulationSignature:
             "Tests whether a candidate mechanism is required to reproduce declared held-out "
             "neural dynamics after matched classical predictive adversaries, source stability, "
             "repeated-case reliability, and eventually causal intervention/ablation evidence."
+        ),
+    )
+
+
+def bmrb_representation_signature() -> RecapitulationSignature:
+    return RecapitulationSignature(
+        id="BMRB_REPRESENTATION_V1",
+        title="Cross-representation neural mechanism recapitulation",
+        domain="representation_geometry",
+        target=(
+            "participant-level held-out mechanism effects and ablation consequences conserved "
+            "across exact-paired raw-neural and frozen learned representation spaces"
+        ),
+        inference_unit="participant",
+        primary_metric="participant_balanced_cross_representation_effect_conservation",
+        favorable_direction="positive_candidate_advantage_and_positive_ablation_necessity",
+        required_controls=(
+            "exact_equivalence_control",
+            "strongest_matched_classical_representation",
+            "mechanism_ablation",
+            "exact_neuros_authority_pairing",
+            "independent_representation_family_replication",
+        ),
+        description=(
+            "Tests whether a candidate computational contrast recurs across frozen raw and learned "
+            "neural representations under identical participant/case authority while keeping "
+            "information novelty separate from conservation."
         ),
     )
 
