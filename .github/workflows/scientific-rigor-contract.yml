@@ -102,7 +102,8 @@ jobs:
           assert version('quantum-bci') == '0.18.0'
           citation = Path('CITATION.cff').read_text(encoding='utf-8')
           assert re.search(r'^version:\s*["\x27]?0\.18\.0["\x27]?\s*$', citation, re.MULTILINE)
-          assert 'docs/PUBLISHABILITY_AUDIT.md'
+          assert Path('docs/PUBLISHABILITY_AUDIT.md').is_file()
+          assert Path('docs/CONFIRMATORY_REPRESENTATION.md').is_file()
           PY
           rm -rf /tmp/qbc-v018-wheel
           python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-v018-wheel
