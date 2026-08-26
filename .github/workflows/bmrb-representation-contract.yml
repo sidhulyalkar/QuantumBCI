@@ -110,6 +110,7 @@ jobs:
       - name: Install pinned neurOS public packages
         run: |
           python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-models
           python -m pip install -e _deps/neuros-v1/packages/neuros-foundation
           python -m pip install -e '.[dev]'
       - name: Qualify frozen foundation encoder seam without model downloads
