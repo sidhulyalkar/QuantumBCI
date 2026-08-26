@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from .bmrb import verify_bmrb_dynamics_mapping
 from .causal_recapitulation import (
     CausalCaseEvidence,
     CausalNecessityPolicy,
@@ -21,7 +22,7 @@ from .matched_recovery import (
     MatchedClassicalRecoveryEvidence,
     matched_classical_recovery_from_mapping,
 )
-from .recapitulation import MechanismNecessityProfile, mechanism_profile_from_mapping
+from .recapitulation import MechanismNecessityProfile
 
 
 def _required_text(name: str, value: Any) -> str:
@@ -83,6 +84,7 @@ class BMRBCausalBundle:
     upstream_bmrb_path: Path
     upstream_bmrb_sha256: str
     upstream_source_fingerprint: str
+    upstream_artifact_fingerprint: str
     policy: CausalNecessityPolicy
     case_specs: tuple[BMRBCausalCaseSpec, ...]
     causal_result: CausalNecessityResult
@@ -98,6 +100,7 @@ class BMRBCausalBundle:
             "upstream_bmrb": self.upstream_bmrb_path.name,
             "upstream_bmrb_sha256": self.upstream_bmrb_sha256,
             "upstream_source_fingerprint": self.upstream_source_fingerprint,
+            "upstream_artifact_fingerprint": self.upstream_artifact_fingerprint,
             "policy": self.policy.to_mapping(),
             "cases": [item.to_mapping() for item in self.case_specs],
             "causal_evidence": self.causal_result.to_mapping(),
@@ -126,14 +129,7 @@ def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
 
 def _load_upstream_profile(path: Path) -> tuple[dict[str, Any], MechanismNecessityProfile]:
     payload = _load_json_object(path, label="upstream BMRB artifact")
-    if payload.get("artifact_role") != "bmrb_dynamics_bundle":
-        raise ValueError("upstream BMRB artifact has the wrong artifact_role")
-    if payload.get("benchmark") != "BMRB_DYNAMICS_V1":
-        raise ValueError("upstream BMRB artifact is not BMRB_DYNAMICS_V1")
-    profile_payload = payload.get("mechanism_profile")
-    if not isinstance(profile_payload, Mapping):
-        raise ValueError("upstream BMRB artifact is missing mechanism_profile")
-    profile = mechanism_profile_from_mapping(profile_payload)
+    profile = verify_bmrb_dynamics_mapping(payload)
     return payload, profile
 
 
@@ -183,6 +179,8 @@ def load_bmrb_causal_manifest(
     policy_payload = payload.get("policy")
     if not isinstance(policy_payload, Mapping):
         raise ValueError("BMRB causal manifest is missing policy")
+    if not isinstance(policy_payload.get("preregistered"), bool):
+        raise TypeError("policy.preregistered must be a JSON boolean")
     policy = CausalNecessityPolicy.from_mapping(policy_payload)
     raw_cases = payload.get("cases")
     if not isinstance(raw_cases, list) or len(raw_cases) < 2:
@@ -256,6 +254,9 @@ def build_bmrb_causal_bundle(manifest_path: str | Path) -> BMRBCausalBundle:
     upstream_source_fingerprint = _required_text(
         "upstream source_fingerprint", upstream_payload.get("source_fingerprint")
     )
+    upstream_artifact_fingerprint = _required_text(
+        "upstream artifact_fingerprint", upstream_payload.get("artifact_fingerprint")
+    )
     mechanism_id = upstream_profile.mechanism_id
 
     causal_cases: list[CausalCaseEvidence] = []
@@ -295,6 +296,7 @@ def build_bmrb_causal_bundle(manifest_path: str | Path) -> BMRBCausalBundle:
         "study_id": study_id,
         "upstream_bmrb_sha256": upstream_sha256,
         "upstream_source_fingerprint": upstream_source_fingerprint,
+        "upstream_artifact_fingerprint": upstream_artifact_fingerprint,
         "policy": policy.to_mapping(),
         "cases": [case.to_mapping() for case in case_specs],
         "causal_source_fingerprint": result.source_fingerprint,
@@ -308,6 +310,7 @@ def build_bmrb_causal_bundle(manifest_path: str | Path) -> BMRBCausalBundle:
         upstream_bmrb_path=upstream_path,
         upstream_bmrb_sha256=upstream_sha256,
         upstream_source_fingerprint=upstream_source_fingerprint,
+        upstream_artifact_fingerprint=upstream_artifact_fingerprint,
         policy=policy,
         case_specs=case_specs,
         causal_result=result,
@@ -381,7 +384,7 @@ table {{ width:100%;border-collapse:collapse;margin:14px 0 30px; }} th,td {{ bor
 <h2>Matched-classical recovery evidence</h2><p class="small">Information set: <code>{escape(information_set_id)}</code>. Recovery is derived from baseline, ablated and recovered metrics; it is not supplied as a free scalar.</p>
 <table><thead><tr><th>Participant</th><th>Classical model</th><th>Metric</th><th>Ablation loss</th><th>Restored loss</th><th>Recovery fraction</th></tr></thead><tbody>{recovery_rows}</tbody></table>
 <p class="small">Lower matched-classical recovery is stronger necessity evidence. Every recovery row has an independent source fingerprint and file SHA-256.</p>
-<p class="small"><code>source_fingerprint={escape(bundle.source_fingerprint)}</code></p>
+<p class="small"><code>upstream_source_fingerprint={escape(bundle.upstream_source_fingerprint)}</code><br><code>upstream_artifact_fingerprint={escape(bundle.upstream_artifact_fingerprint)}</code><br><code>source_fingerprint={escape(bundle.source_fingerprint)}</code></p>
 </body></html>"""
 
 
