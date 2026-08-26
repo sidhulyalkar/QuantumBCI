@@ -1,19 +1,19 @@
 """Confirmatory cross-representation protocol for publication-grade BMRB studies.
 
-This module is deliberately a new scientific surface rather than a silent reinterpretation
-of BMRB-Representation v1.  V1 remains a qualified exploratory/conservation artifact.
-The confirmatory protocol fixes the primary calibration budget and primary classical
-control before evaluation, binds the decision policy to external preregistration evidence,
-and reports participant-level uncertainty without averaging distinct calibration budgets
-into one primary estimand.
+BMRB-Representation v1 remains a reproducible exploratory/conservation artifact. This
+v2 surface defines a stricter confirmatory estimand: one predeclared calibration budget,
+one predeclared classical control, independent participant-level uncertainty, and an
+external preregistration record bound to the exact decision policy. Other calibration
+budgets remain visible as secondary evidence and are never averaged into the primary
+estimand.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-from pathlib import Path
 import json
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -49,7 +49,10 @@ def _strict_bool(name: str, value: Any) -> bool:
 
 
 def _finite(name: str, value: Any) -> float:
-    number = float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number") from exc
     if not np.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return number
@@ -87,13 +90,13 @@ def _metric_balanced_accuracy(benchmark: Mapping[str, Any], method: str) -> floa
         raise ValueError("E001 benchmark is missing metrics mapping")
     metric = metrics.get(method)
     if not isinstance(metric, Mapping):
-        raise ValueError(f"E001 benchmark is missing preregistered control/method {method!r}")
+        raise ValueError(f"E001 benchmark is missing preregistered method {method!r}")
     return _finite(f"balanced_accuracy[{method}]", metric.get("balanced_accuracy"))
 
 
 @dataclass(frozen=True)
 class ConfirmatoryRepresentationPolicy:
-    """Study-specific confirmatory policy with no universal biological thresholds."""
+    """Study-specific policy. Thresholds are explicit rather than universal defaults."""
 
     policy_id: str
     reference_representation_id: str
@@ -127,22 +130,24 @@ class ConfirmatoryRepresentationPolicy:
         object.__setattr__(
             self, "primary_calibration_per_class", int(self.primary_calibration_per_class)
         )
-        if int(self.min_participants) < 2:
-            raise ValueError("min_participants must be at least 2")
-        if int(self.min_representations) < 2:
-            raise ValueError("min_representations must be at least 2")
-        if int(self.min_representation_families) < 1:
-            raise ValueError("min_representation_families must be positive")
-        object.__setattr__(self, "min_participants", int(self.min_participants))
-        object.__setattr__(self, "min_representations", int(self.min_representations))
+        for name, minimum in (
+            ("min_participants", 2),
+            ("min_representations", 2),
+            ("min_representation_families", 1),
+        ):
+            value = int(getattr(self, name))
+            if value < minimum:
+                raise ValueError(f"{name} must be at least {minimum}")
+            object.__setattr__(self, name, value)
         object.__setattr__(
-            self, "min_representation_families", int(self.min_representation_families)
+            self,
+            "min_candidate_advantage",
+            _finite("min_candidate_advantage", self.min_candidate_advantage),
         )
         object.__setattr__(
-            self, "min_candidate_advantage", _finite("min_candidate_advantage", self.min_candidate_advantage)
-        )
-        object.__setattr__(
-            self, "min_ablation_necessity", _finite("min_ablation_necessity", self.min_ablation_necessity)
+            self,
+            "min_ablation_necessity",
+            _finite("min_ablation_necessity", self.min_ablation_necessity),
         )
         for name in (
             "min_reference_positive_fraction",
@@ -158,7 +163,7 @@ class ConfirmatoryRepresentationPolicy:
         object.__setattr__(self, "inference_seed", int(self.inference_seed))
 
     def decision_payload(self) -> dict[str, Any]:
-        """Exact policy content that must have been registered before confirmatory analysis."""
+        """Exact policy content whose fingerprint must appear in the registration."""
 
         return {
             "schema_version": 2,
@@ -190,6 +195,8 @@ class ConfirmatoryRepresentationPolicy:
 
     @property
     def confirmatory_authority(self) -> bool:
+        """Whether supplied external registration evidence binds this exact policy."""
+
         return bool(
             self.preregistration is not None
             and self.preregistration.matches_policy(self.decision_fingerprint)
@@ -207,8 +214,8 @@ class ConfirmatoryRepresentationPolicy:
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> "ConfirmatoryRepresentationPolicy":
-        registration_payload = payload.get("preregistration")
-        if registration_payload is not None and not isinstance(registration_payload, Mapping):
+        registration = payload.get("preregistration")
+        if registration is not None and not isinstance(registration, Mapping):
             raise ValueError("policy.preregistration must be an object or null")
         policy = cls(
             policy_id=_required_text("policy_id", payload.get("policy_id")),
@@ -222,16 +229,28 @@ class ConfirmatoryRepresentationPolicy:
             min_participants=int(payload.get("min_participants", 0)),
             min_representations=int(payload.get("min_representations", 0)),
             min_representation_families=int(payload.get("min_representation_families", 0)),
-            min_candidate_advantage=float(payload.get("min_candidate_advantage")),
-            min_ablation_necessity=float(payload.get("min_ablation_necessity")),
-            min_reference_positive_fraction=float(payload.get("min_reference_positive_fraction")),
-            min_all_lane_positive_fraction=float(payload.get("min_all_lane_positive_fraction")),
-            min_direction_match_fraction=float(payload.get("min_direction_match_fraction")),
-            min_ablation_direction_match_fraction=float(
-                payload.get("min_ablation_direction_match_fraction")
+            min_candidate_advantage=_finite(
+                "min_candidate_advantage", payload.get("min_candidate_advantage")
             ),
-            min_information_novel_representation_fraction=float(
-                payload.get("min_information_novel_representation_fraction")
+            min_ablation_necessity=_finite(
+                "min_ablation_necessity", payload.get("min_ablation_necessity")
+            ),
+            min_reference_positive_fraction=_fraction(
+                "min_reference_positive_fraction", payload.get("min_reference_positive_fraction")
+            ),
+            min_all_lane_positive_fraction=_fraction(
+                "min_all_lane_positive_fraction", payload.get("min_all_lane_positive_fraction")
+            ),
+            min_direction_match_fraction=_fraction(
+                "min_direction_match_fraction", payload.get("min_direction_match_fraction")
+            ),
+            min_ablation_direction_match_fraction=_fraction(
+                "min_ablation_direction_match_fraction",
+                payload.get("min_ablation_direction_match_fraction"),
+            ),
+            min_information_novel_representation_fraction=_fraction(
+                "min_information_novel_representation_fraction",
+                payload.get("min_information_novel_representation_fraction"),
             ),
             sample_size_rationale=_required_text(
                 "sample_size_rationale", payload.get("sample_size_rationale")
@@ -239,13 +258,11 @@ class ConfirmatoryRepresentationPolicy:
             inference_seed=int(payload.get("inference_seed", 1801)),
             bootstrap_resamples=int(payload.get("bootstrap_resamples", 5000)),
             preregistration=(
-                None
-                if registration_payload is None
-                else PreregistrationEvidence.from_mapping(registration_payload)
+                None if registration is None else PreregistrationEvidence.from_mapping(registration)
             ),
         )
-        supplied_fingerprint = payload.get("decision_fingerprint")
-        if supplied_fingerprint is not None and str(supplied_fingerprint) != policy.decision_fingerprint:
+        supplied = payload.get("decision_fingerprint")
+        if supplied is not None and str(supplied) != policy.decision_fingerprint:
             raise ValueError("policy decision_fingerprint does not match reconstructed policy")
         return policy
 
@@ -268,6 +285,34 @@ class ConfirmatoryRepresentationObservation:
     model_id: str | None = None
     model_revision: str | None = None
 
+    def __post_init__(self) -> None:
+        for name in (
+            "participant_id",
+            "occasion_id",
+            "case_id",
+            "representation_id",
+            "representation_family",
+            "authority_fingerprint",
+            "representation_sha256",
+            "source_fingerprint",
+        ):
+            object.__setattr__(self, name, _required_text(name, getattr(self, name)))
+        if int(self.calibration_per_class) < 0:
+            raise ValueError("calibration_per_class must be non-negative")
+        object.__setattr__(self, "calibration_per_class", int(self.calibration_per_class))
+        for name in ("candidate_metric", "primary_control_metric", "ablated_metric"):
+            object.__setattr__(self, name, _finite(name, getattr(self, name)))
+        object.__setattr__(
+            self, "information_novel", _strict_bool("information_novel", self.information_novel)
+        )
+        if self.model_id is not None:
+            object.__setattr__(self, "model_id", _required_text("model_id", self.model_id))
+            object.__setattr__(
+                self, "model_revision", _required_text("model_revision", self.model_revision)
+            )
+        elif self.model_revision is not None:
+            raise ValueError("model_revision cannot be supplied without model_id")
+
     @property
     def key(self) -> tuple[str, str, str, int]:
         return (
@@ -284,6 +329,27 @@ class ConfirmatoryRepresentationObservation:
     @property
     def ablation_necessity(self) -> float:
         return self.candidate_metric - self.ablated_metric
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "participant_id": self.participant_id,
+            "occasion_id": self.occasion_id,
+            "case_id": self.case_id,
+            "calibration_per_class": self.calibration_per_class,
+            "representation_id": self.representation_id,
+            "representation_family": self.representation_family,
+            "authority_fingerprint": self.authority_fingerprint,
+            "representation_sha256": self.representation_sha256,
+            "source_fingerprint": self.source_fingerprint,
+            "candidate_metric": self.candidate_metric,
+            "primary_control_metric": self.primary_control_metric,
+            "ablated_metric": self.ablated_metric,
+            "candidate_advantage": self.candidate_advantage,
+            "ablation_necessity": self.ablation_necessity,
+            "information_novel": self.information_novel,
+            "model_id": self.model_id,
+            "model_revision": self.model_revision,
+        }
 
 
 @dataclass(frozen=True)
@@ -344,9 +410,24 @@ class ConfirmatoryRepresentationResult:
     direction_match_fraction: float
     ablation_direction_match_fraction: float
     information_novel_representation_fraction: float
-    scientific_criteria_passed: bool
-    criteria_reasons: tuple[str, ...]
+    effect_criteria_passed: bool
+    adversary_survival_passed: bool
+    conservation_criteria_passed: bool
+    coverage_criteria_passed: bool
+    effect_reasons: tuple[str, ...]
+    adversary_reasons: tuple[str, ...]
+    conservation_reasons: tuple[str, ...]
+    coverage_reasons: tuple[str, ...]
     source_fingerprint: str
+
+    @property
+    def scientific_criteria_passed(self) -> bool:
+        return bool(
+            self.effect_criteria_passed
+            and self.adversary_survival_passed
+            and self.conservation_criteria_passed
+            and self.coverage_criteria_passed
+        )
 
     @property
     def promotion_eligible(self) -> bool:
@@ -362,6 +443,7 @@ class ConfirmatoryRepresentationResult:
             "mechanism_id": self.mechanism_id,
             "policy": self.policy.to_mapping(),
             "primary_calibration_per_class": self.policy.primary_calibration_per_class,
+            "primary_classical_control": self.policy.primary_classical_control,
             "available_calibration_budgets": list(self.available_calibration_budgets),
             "participant_count": self.participant_count,
             "representation_count": self.representation_count,
@@ -371,18 +453,26 @@ class ConfirmatoryRepresentationResult:
             "direction_match_fraction": self.direction_match_fraction,
             "ablation_direction_match_fraction": self.ablation_direction_match_fraction,
             "information_novel_representation_fraction": self.information_novel_representation_fraction,
+            "effect_criteria_passed": self.effect_criteria_passed,
+            "adversary_survival_passed": self.adversary_survival_passed,
+            "conservation_criteria_passed": self.conservation_criteria_passed,
+            "coverage_criteria_passed": self.coverage_criteria_passed,
             "scientific_criteria_passed": self.scientific_criteria_passed,
             "confirmatory_authority": self.policy.confirmatory_authority,
             "promotion_eligible": self.promotion_eligible,
-            "criteria_reasons": list(self.criteria_reasons),
+            "effect_reasons": list(self.effect_reasons),
+            "adversary_reasons": list(self.adversary_reasons),
+            "conservation_reasons": list(self.conservation_reasons),
+            "coverage_reasons": list(self.coverage_reasons),
             "lanes": [lane.to_mapping() for lane in self.lanes],
             "calibration_frontier": [point.to_mapping() for point in self.calibration_frontier],
             "source_fingerprint": self.source_fingerprint,
             "physical_quantum_promotion_eligible": False,
             "interpretation": (
-                "The primary estimand uses exactly one preregistered calibration budget and one "
-                "preregistered classical control. Other calibration budgets are secondary. "
-                "Cross-representation recurrence is not causal or physical-quantum evidence."
+                "The primary estimand uses exactly one predeclared calibration budget and one "
+                "predeclared classical control. Other budgets are secondary. Predictive effect, "
+                "classical-adversary survival, conservation, and replication coverage remain "
+                "separate scientific decisions."
             ),
         }
 
@@ -393,8 +483,8 @@ def confirmatory_representation_signature() -> RecapitulationSignature:
         title="Confirmatory held-out neural mechanism conservation across representations",
         domain="representation_mechanism_conservation",
         target=(
-            "participant-level candidate-vs-preregistered-control and ablation effects at one "
-            "predeclared calibration budget across exact-paired representation lanes"
+            "participant-level candidate-vs-predeclared-control and representation-ablation "
+            "effects at one predeclared calibration budget across exact-paired lanes"
         ),
         inference_unit="participant",
         primary_metric="participant_balanced_candidate_advantage",
@@ -407,7 +497,7 @@ def confirmatory_representation_signature() -> RecapitulationSignature:
         ),
         description=(
             "Separates confirmatory effect estimation from descriptive calibration frontiers and "
-            "requires external preregistration evidence before any PASS can authorize promotion."
+            "requires an external preregistration binding before any PASS can promote evidence."
         ),
     )
 
@@ -429,23 +519,27 @@ def _validate_exact_pairing(
     for item in observations:
         lane = by_lane.setdefault(item.representation_id, {})
         if item.key in lane:
-            raise ValueError(f"duplicate confirmatory observation in {item.representation_id}: {item.key}")
+            raise ValueError(
+                f"duplicate confirmatory observation in {item.representation_id!r}: {item.key}"
+            )
         lane[item.key] = item
     if reference_representation_id not in by_lane:
         raise ValueError("reference representation is absent")
     reference = by_lane[reference_representation_id]
-    keys = set(reference)
+    reference_keys = set(reference)
     for lane_id, lane in sorted(by_lane.items()):
-        if set(lane) != keys:
-            missing = sorted(keys - set(lane))
-            extra = sorted(set(lane) - keys)
+        if set(lane) != reference_keys:
+            missing = sorted(reference_keys - set(lane))
+            extra = sorted(set(lane) - reference_keys)
             raise ValueError(
-                f"confirmatory representation lanes must be exactly paired; lane={lane_id!r} "
-                f"missing={missing} extra={extra}"
+                "confirmatory representation lanes must be exactly paired; "
+                f"lane={lane_id!r} missing={missing} extra={extra}"
             )
-        for key in sorted(keys):
+        for key in sorted(reference_keys):
             if lane[key].authority_fingerprint != reference[key].authority_fingerprint:
-                raise ValueError(f"authority fingerprint mismatch for key={key}, lane={lane_id!r}")
+                raise ValueError(
+                    f"authority fingerprint mismatch for key={key}, lane={lane_id!r}"
+                )
 
 
 def _lane_summary(
@@ -454,7 +548,13 @@ def _lane_summary(
     policy: ConfirmatoryRepresentationPolicy,
     lane_offset: int,
 ) -> ConfirmatoryLaneSummary:
+    if not observations:
+        raise ValueError("lane summary requires observations")
     first = observations[0]
+    for item in observations[1:]:
+        for field in ("representation_id", "representation_family", "model_id", "model_revision"):
+            if getattr(item, field) != getattr(first, field):
+                raise ValueError(f"representation lane mixes {field} values")
     effects = _participant_means(observations, "candidate_advantage")
     ablations = _participant_means(observations, "ablation_necessity")
     return ConfirmatoryLaneSummary(
@@ -472,7 +572,9 @@ def _lane_summary(
             bootstrap_resamples=policy.bootstrap_resamples,
             seed=policy.inference_seed + lane_offset * 2 + 1,
         ),
-        information_novel_fraction=float(np.mean([item.information_novel for item in observations])),
+        information_novel_fraction=float(
+            np.mean([item.information_novel for item in observations])
+        ),
         model_id=first.model_id,
         model_revision=first.model_revision,
     )
@@ -493,8 +595,10 @@ def _frontier(
                 for item in observations
                 if item.calibration_per_class == budget and item.representation_id == lane
             ]
-            effect[lane] = float(np.mean(list(_participant_means(subset, "candidate_advantage").values())))
-            ablation[lane] = float(np.mean(list(_participant_means(subset, "ablation_necessity").values())))
+            effect_values = _participant_means(subset, "candidate_advantage")
+            ablation_values = _participant_means(subset, "ablation_necessity")
+            effect[lane] = float(np.mean(list(effect_values.values())))
+            ablation[lane] = float(np.mean(list(ablation_values.values())))
         points.append(
             CalibrationFrontierPoint(
                 calibration_per_class=budget,
@@ -529,16 +633,13 @@ def evaluate_confirmatory_representation(
     by_lane: dict[str, list[ConfirmatoryRepresentationObservation]] = {}
     for item in primary:
         by_lane.setdefault(item.representation_id, []).append(item)
-    if policy.reference_representation_id not in by_lane:
-        raise ValueError("reference representation has no primary-budget observations")
-
     lane_ids = sorted(by_lane)
+    participants = sorted({item.participant_id for item in primary})
+    families = {item.representation_family for item in primary}
     summaries = tuple(
         _lane_summary(by_lane[lane_id], policy=policy, lane_offset=index)
         for index, lane_id in enumerate(lane_ids)
     )
-    participants = sorted({item.participant_id for item in primary})
-    families = {item.representation_family for item in primary}
     lane_effects = {
         lane_id: _participant_means(by_lane[lane_id], "candidate_advantage")
         for lane_id in lane_ids
@@ -556,6 +657,7 @@ def evaluate_confirmatory_representation(
     all_lane_positive = float(
         np.mean([value >= policy.min_candidate_advantage for value in all_effects])
     )
+
     direction_matches: list[bool] = []
     ablation_matches: list[bool] = []
     for lane_id in lane_ids:
@@ -565,56 +667,73 @@ def evaluate_confirmatory_representation(
             ref_effect = reference[participant] - policy.min_candidate_advantage
             lane_effect = lane_effects[lane_id][participant] - policy.min_candidate_advantage
             direction_matches.append(np.sign(ref_effect) == np.sign(lane_effect))
-            ref_abl = reference_ablation[participant] - policy.min_ablation_necessity
-            lane_abl = lane_ablations[lane_id][participant] - policy.min_ablation_necessity
-            ablation_matches.append(np.sign(ref_abl) == np.sign(lane_abl))
+            ref_ablation = reference_ablation[participant] - policy.min_ablation_necessity
+            lane_ablation = lane_ablations[lane_id][participant] - policy.min_ablation_necessity
+            ablation_matches.append(np.sign(ref_ablation) == np.sign(lane_ablation))
     direction_match = float(np.mean(direction_matches)) if direction_matches else 1.0
     ablation_match = float(np.mean(ablation_matches)) if ablation_matches else 1.0
-    novelty = float(np.mean([summary.information_novel_fraction >= 1.0 - 1e-12 for summary in summaries]))
+    novelty = float(
+        np.mean([summary.information_novel_fraction >= 1.0 - 1e-12 for summary in summaries])
+    )
 
-    reasons: list[str] = []
-    if len(participants) < policy.min_participants:
-        reasons.append(f"participants {len(participants)} < preregistered {policy.min_participants}")
-    if len(summaries) < policy.min_representations:
-        reasons.append(f"representations {len(summaries)} < preregistered {policy.min_representations}")
-    if len(families) < policy.min_representation_families:
-        reasons.append(
-            f"representation families {len(families)} < preregistered {policy.min_representation_families}"
-        )
+    effect_reasons: list[str] = []
     if reference_positive < policy.min_reference_positive_fraction:
-        reasons.append(
+        effect_reasons.append(
             f"reference positive fraction {reference_positive:.3f} < preregistered "
             f"{policy.min_reference_positive_fraction:.3f}"
         )
     if all_lane_positive < policy.min_all_lane_positive_fraction:
-        reasons.append(
+        effect_reasons.append(
             f"all-lane positive fraction {all_lane_positive:.3f} < preregistered "
             f"{policy.min_all_lane_positive_fraction:.3f}"
         )
+    for summary in summaries:
+        if summary.candidate.observed_mean < policy.min_candidate_advantage:
+            effect_reasons.append(
+                f"lane {summary.representation_id} mean candidate advantage "
+                f"{summary.candidate.observed_mean:.6g} < preregistered "
+                f"{policy.min_candidate_advantage:.6g}"
+            )
+
+    adversary_reasons: list[str] = []
+    if novelty < policy.min_information_novel_representation_fraction:
+        adversary_reasons.append(
+            f"information-novel representation fraction {novelty:.3f} < preregistered "
+            f"{policy.min_information_novel_representation_fraction:.3f}"
+        )
+
+    conservation_reasons: list[str] = []
     if direction_match < policy.min_direction_match_fraction:
-        reasons.append(
-            f"direction match {direction_match:.3f} < preregistered {policy.min_direction_match_fraction:.3f}"
+        conservation_reasons.append(
+            f"direction match {direction_match:.3f} < preregistered "
+            f"{policy.min_direction_match_fraction:.3f}"
         )
     if ablation_match < policy.min_ablation_direction_match_fraction:
-        reasons.append(
+        conservation_reasons.append(
             f"ablation direction match {ablation_match:.3f} < preregistered "
             f"{policy.min_ablation_direction_match_fraction:.3f}"
         )
     for summary in summaries:
-        if summary.candidate.observed_mean < policy.min_candidate_advantage:
-            reasons.append(
-                f"lane {summary.representation_id} mean candidate advantage "
-                f"{summary.candidate.observed_mean:.6g} < preregistered {policy.min_candidate_advantage:.6g}"
-            )
         if summary.ablation.observed_mean < policy.min_ablation_necessity:
-            reasons.append(
+            conservation_reasons.append(
                 f"lane {summary.representation_id} mean ablation necessity "
-                f"{summary.ablation.observed_mean:.6g} < preregistered {policy.min_ablation_necessity:.6g}"
+                f"{summary.ablation.observed_mean:.6g} < preregistered "
+                f"{policy.min_ablation_necessity:.6g}"
             )
-    if novelty < policy.min_information_novel_representation_fraction:
-        reasons.append(
-            f"information-novel representation fraction {novelty:.3f} < preregistered "
-            f"{policy.min_information_novel_representation_fraction:.3f}"
+
+    coverage_reasons: list[str] = []
+    if len(participants) < policy.min_participants:
+        coverage_reasons.append(
+            f"participants {len(participants)} < preregistered {policy.min_participants}"
+        )
+    if len(summaries) < policy.min_representations:
+        coverage_reasons.append(
+            f"representations {len(summaries)} < preregistered {policy.min_representations}"
+        )
+    if len(families) < policy.min_representation_families:
+        coverage_reasons.append(
+            f"representation families {len(families)} < preregistered "
+            f"{policy.min_representation_families}"
         )
 
     identity = {
@@ -622,23 +741,7 @@ def evaluate_confirmatory_representation(
         "mechanism_id": _required_text("mechanism_id", mechanism_id),
         "policy": policy.to_mapping(),
         "observations": [
-            {
-                "participant_id": item.participant_id,
-                "occasion_id": item.occasion_id,
-                "case_id": item.case_id,
-                "calibration_per_class": item.calibration_per_class,
-                "representation_id": item.representation_id,
-                "representation_family": item.representation_family,
-                "authority_fingerprint": item.authority_fingerprint,
-                "representation_sha256": item.representation_sha256,
-                "source_fingerprint": item.source_fingerprint,
-                "candidate_metric": item.candidate_metric,
-                "primary_control_metric": item.primary_control_metric,
-                "ablated_metric": item.ablated_metric,
-                "information_novel": item.information_novel,
-                "model_id": item.model_id,
-                "model_revision": item.model_revision,
-            }
+            item.to_mapping()
             for item in sorted(
                 materialized,
                 key=lambda value: (
@@ -670,8 +773,14 @@ def evaluate_confirmatory_representation(
         direction_match_fraction=direction_match,
         ablation_direction_match_fraction=ablation_match,
         information_novel_representation_fraction=novelty,
-        scientific_criteria_passed=not reasons,
-        criteria_reasons=tuple(reasons),
+        effect_criteria_passed=not effect_reasons,
+        adversary_survival_passed=not adversary_reasons,
+        conservation_criteria_passed=not conservation_reasons,
+        coverage_criteria_passed=not coverage_reasons,
+        effect_reasons=tuple(effect_reasons),
+        adversary_reasons=tuple(adversary_reasons),
+        conservation_reasons=tuple(conservation_reasons),
+        coverage_reasons=tuple(coverage_reasons),
         source_fingerprint=source_fingerprint,
     )
 
@@ -679,10 +788,9 @@ def evaluate_confirmatory_representation(
 def build_confirmatory_representation_profile(
     result: ConfirmatoryRepresentationResult,
 ) -> MechanismNecessityProfile:
-    """Map the v2 result onto BMRB without allowing retrospective PASS labels."""
+    """Map independent v2 decisions onto the monotonic BMRB evidence ladder."""
 
     authority = result.policy.confirmatory_authority
-    scientific = result.scientific_criteria_passed
     descriptive = EvidenceGate(
         id="paired_representation_authority",
         tier=EvidenceTier.DESCRIPTIVE,
@@ -691,7 +799,8 @@ def build_confirmatory_representation_profile(
         evidence_ref=result.source_fingerprint,
         threshold="exact paired key and authority equality",
     )
-    if not scientific:
+
+    if not result.effect_criteria_passed:
         predictive_status = GateStatus.FAIL
     elif authority:
         predictive_status = GateStatus.PASS
@@ -702,24 +811,22 @@ def build_confirmatory_representation_profile(
         tier=EvidenceTier.PREDICTIVE,
         status=predictive_status,
         summary=(
-            "Primary-budget candidate and ablation effect criteria were evaluated against the "
-            "predeclared classical control."
+            "Primary-budget candidate effects were evaluated against the predeclared classical "
+            "control at the participant inference unit."
         ),
         evidence_ref=result.source_fingerprint,
-        metric="participant_primary_budget_effect",
+        metric="participant_primary_budget_candidate_advantage",
         value=float(min(summary.candidate.observed_mean for summary in result.lanes)),
         threshold=(
-            f"candidate>={result.policy.min_candidate_advantage}; "
-            f"ablation>={result.policy.min_ablation_necessity}"
-            if authority and scientific
+            f"mean candidate advantage>={result.policy.min_candidate_advantage}; "
+            f"reference positive>={result.policy.min_reference_positive_fraction}; "
+            f"all-lane positive>={result.policy.min_all_lane_positive_fraction}"
+            if predictive_status == GateStatus.PASS
             else None
         ),
     )
-    novelty_ok = (
-        result.information_novel_representation_fraction
-        >= result.policy.min_information_novel_representation_fraction
-    )
-    if not novelty_ok:
+
+    if not result.adversary_survival_passed:
         adversary_status = GateStatus.FAIL
     elif predictive.status == GateStatus.PASS and authority:
         adversary_status = GateStatus.PASS
@@ -729,7 +836,7 @@ def build_confirmatory_representation_profile(
         id="matched_representation_adversaries",
         tier=EvidenceTier.ADVERSARY_SURVIVING,
         status=adversary_status,
-        summary="Information novelty is evaluated separately from cross-representation recurrence.",
+        summary="Information novelty is evaluated separately from predictive recurrence.",
         evidence_ref=result.source_fingerprint,
         metric="information_novel_representation_fraction",
         value=result.information_novel_representation_fraction,
@@ -739,12 +846,8 @@ def build_confirmatory_representation_profile(
             else None
         ),
     )
-    stability_ok = (
-        result.direction_match_fraction >= result.policy.min_direction_match_fraction
-        and result.ablation_direction_match_fraction
-        >= result.policy.min_ablation_direction_match_fraction
-    )
-    if not stability_ok:
+
+    if not result.conservation_criteria_passed:
         stability_status = GateStatus.FAIL
     elif adversary.status == GateStatus.PASS and authority:
         stability_status = GateStatus.PASS
@@ -759,18 +862,15 @@ def build_confirmatory_representation_profile(
         metric="minimum_direction_match_fraction",
         value=min(result.direction_match_fraction, result.ablation_direction_match_fraction),
         threshold=(
-            f"candidate>={result.policy.min_direction_match_fraction}; "
-            f"ablation>={result.policy.min_ablation_direction_match_fraction}"
+            f"candidate direction>={result.policy.min_direction_match_fraction}; "
+            f"ablation direction>={result.policy.min_ablation_direction_match_fraction}; "
+            f"mean ablation>={result.policy.min_ablation_necessity}"
             if stability_status == GateStatus.PASS
             else None
         ),
     )
-    repeated_ok = (
-        result.participant_count >= result.policy.min_participants
-        and result.representation_count >= result.policy.min_representations
-        and result.representation_family_count >= result.policy.min_representation_families
-    )
-    if not repeated_ok:
+
+    if not result.coverage_criteria_passed:
         repeated_status = GateStatus.FAIL
     elif stability.status == GateStatus.PASS and authority:
         repeated_status = GateStatus.PASS
@@ -780,7 +880,7 @@ def build_confirmatory_representation_profile(
         id="cross_representation_replication",
         tier=EvidenceTier.REPEATED_CASE,
         status=repeated_status,
-        summary="Participant and representation-family replication requirements were evaluated.",
+        summary="Participant and representation-family coverage requirements were evaluated.",
         evidence_ref=result.source_fingerprint,
         metric="participant_and_representation_coverage",
         value=float(result.participant_count),
@@ -796,7 +896,7 @@ def build_confirmatory_representation_profile(
         id="causal_intervention_and_ablation",
         tier=EvidenceTier.CAUSAL_MECHANISTIC,
         status=GateStatus.NOT_RUN,
-        summary="Cross-representation recurrence is not causal necessity.",
+        summary="Representation recurrence and representation ablation are not causal necessity.",
     )
     physical = EvidenceGate(
         id="physical_quantum_witness",
@@ -830,7 +930,13 @@ def _resolve_dir(root: Path, value: Any, *, label: str) -> Path:
 
 def load_confirmatory_representation_manifest(
     manifest_path: str | Path,
-) -> tuple[str, str, ConfirmatoryRepresentationPolicy, tuple[ConfirmatoryRepresentationObservation, ...], dict[str, Any]]:
+) -> tuple[
+    str,
+    str,
+    ConfirmatoryRepresentationPolicy,
+    tuple[ConfirmatoryRepresentationObservation, ...],
+    dict[str, Any],
+]:
     """Load verified v1 lane bundles into the stricter v2 confirmatory estimand."""
 
     path = Path(manifest_path).expanduser().resolve()
@@ -865,10 +971,22 @@ def load_confirmatory_representation_manifest(
         verification = verify_run_artifacts(artifact_dir)
         if not verification["valid"]:
             raise ValueError(f"lane {lane_id!r} failed closed-world verification: {verification}")
+        run = _load_json(artifact_dir / "run.json", label="lane run")
         lane_manifest = _load_json(artifact_dir / "study_manifest.json", label="lane manifest")
         lane_cases = _load_json(artifact_dir / "case_results.json", label="lane cases")
         if lane_manifest.get("artifact_role") != E001_REPRESENTATION_LANE_SCHEMA:
             raise ValueError(f"lane {lane_id!r} is not a supported E001 representation lane")
+        scientific = _required_text(
+            "scientific_fingerprint", lane_manifest.get("scientific_fingerprint")
+        )
+        if run.get("scientific_fingerprint") != scientific:
+            raise ValueError("lane run/manifest scientific fingerprint mismatch")
+        if lane_cases.get("scientific_fingerprint") != scientific:
+            raise ValueError("lane cases/manifest scientific fingerprint mismatch")
+        expected = raw_lane.get("scientific_fingerprint")
+        if expected is not None and str(expected) != scientific:
+            raise ValueError(f"lane {lane_id!r} scientific_fingerprint mismatch")
+
         representation_family = _required_text(
             "representation_family", lane_manifest.get("representation_family")
         )
@@ -883,12 +1001,10 @@ def load_confirmatory_representation_manifest(
         source_representation_id = _required_text(
             "representation_id", lane_manifest.get("representation_id")
         )
-        expected_scientific = _required_text(
-            "scientific_fingerprint", lane_manifest.get("scientific_fingerprint")
-        )
         raw_cases = lane_cases.get("cases")
         if not isinstance(raw_cases, list) or not raw_cases:
             raise ValueError(f"lane {lane_id!r} contains no case results")
+
         for case in raw_cases:
             if not isinstance(case, Mapping):
                 raise ValueError("lane case must be an object")
@@ -897,7 +1013,9 @@ def load_confirmatory_representation_manifest(
             representation_sha = _required_text(
                 "representation_sha256", case.get("representation_sha256")
             )
-            source_fingerprint = _required_text("study_fingerprint", case.get("study_fingerprint"))
+            source_fingerprint = _required_text(
+                "study_fingerprint", case.get("study_fingerprint")
+            )
             authority = case.get("authority")
             if not isinstance(authority, Mapping):
                 raise ValueError("lane case lacks authority")
@@ -915,27 +1033,34 @@ def load_confirmatory_representation_manifest(
             if not isinstance(held_out, list) or not held_out:
                 raise ValueError("lane case authority lacks held_out_values")
             occasion = _required_text(
-                "occasion",
-                case_metadata.get("held_out_session", held_out[0]),
+                "occasion", case_metadata.get("held_out_session", held_out[0])
             )
             rows = case.get("rows")
             if not isinstance(rows, list) or not rows:
                 raise ValueError("lane case contains no E001 rows")
+            seen_budgets: set[int] = set()
             for row in rows:
                 if not isinstance(row, Mapping):
                     raise ValueError("E001 row must be an object")
+                if row.get("case_id") != case_id:
+                    raise ValueError("E001 row case_id does not match case authority")
+                if row.get("authority_fingerprint") != authority_fingerprint:
+                    raise ValueError("E001 row authority fingerprint mismatch")
+                if row.get("representation_sha256") != representation_sha:
+                    raise ValueError("E001 row representation SHA mismatch")
+                budget = int(row.get("calibration_per_class", -1))
+                if budget < 0 or budget in seen_budgets:
+                    raise ValueError("E001 row has invalid or duplicate calibration budget")
+                seen_budgets.add(budget)
                 benchmark = row.get("benchmark")
                 if not isinstance(benchmark, Mapping):
                     raise ValueError("E001 row lacks benchmark")
-                information_novel = _strict_bool(
-                    "density_information_novel", benchmark.get("density_information_novel")
-                )
                 observations.append(
                     ConfirmatoryRepresentationObservation(
                         participant_id=participant,
                         occasion_id=occasion,
                         case_id=case_id,
-                        calibration_per_class=int(row.get("calibration_per_class", -1)),
+                        calibration_per_class=budget,
                         representation_id=lane_id,
                         representation_family=representation_family,
                         authority_fingerprint=authority_fingerprint,
@@ -948,22 +1073,22 @@ def load_confirmatory_representation_manifest(
                         ablated_metric=_metric_balanced_accuracy(
                             benchmark, "offdiagonal_ablation"
                         ),
-                        information_novel=information_novel,
+                        information_novel=_strict_bool(
+                            "density_information_novel",
+                            benchmark.get("density_information_novel"),
+                        ),
                         model_id=model_id,
                         model_revision=model_revision,
                     )
                 )
-        expected = raw_lane.get("scientific_fingerprint")
-        if expected is not None and str(expected) != expected_scientific:
-            raise ValueError(f"lane {lane_id!r} scientific_fingerprint mismatch")
     if policy.reference_representation_id not in lane_ids:
         raise ValueError("reference_representation_id is not a declared lane")
     return study_id, mechanism_id, policy, tuple(observations), dict(manifest)
 
 
 def build_confirmatory_representation_bundle(manifest_path: str | Path) -> dict[str, Any]:
-    study_id, mechanism_id, policy, observations, manifest = load_confirmatory_representation_manifest(
-        manifest_path
+    study_id, mechanism_id, policy, observations, manifest = (
+        load_confirmatory_representation_manifest(manifest_path)
     )
     result = evaluate_confirmatory_representation(
         observations,
@@ -972,7 +1097,7 @@ def build_confirmatory_representation_bundle(manifest_path: str | Path) -> dict[
         policy=policy,
     )
     profile = build_confirmatory_representation_profile(result)
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": 2,
         "artifact_role": "bmrb_confirmatory_representation_bundle",
         "benchmark": CONFIRMATORY_REPRESENTATION_BENCHMARK,
@@ -987,6 +1112,7 @@ def build_confirmatory_representation_bundle(manifest_path: str | Path) -> dict[
             "external preregistration evidence is required for confirmatory promotion",
             "participant is the inference unit",
             "other calibration budgets are secondary/descriptive",
+            "predictive, adversary, conservation and coverage decisions remain separate",
             "cross-representation recurrence is not causal necessity",
             "physical-quantum claims require independent witness evidence",
         ],
@@ -1008,6 +1134,8 @@ def write_confirmatory_representation_bundle(
     output.mkdir(parents=True, exist_ok=True)
     json_path = output / "bmrb_confirmatory_representation.json"
     report_path = output / "report.md"
+    run_path = output / "run.json"
+    ledger_path = output / "artifact_hashes.json"
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     evidence = payload["representation_evidence"]
     profile = payload["mechanism_profile"]
@@ -1017,13 +1145,14 @@ def write_confirmatory_representation_bundle(
         f"- Study: `{payload['study_id']}`",
         f"- Mechanism: `{payload['mechanism_id']}`",
         f"- Primary calibration/class: `{evidence['primary_calibration_per_class']}`",
+        f"- Primary classical control: `{evidence['primary_classical_control']}`",
         f"- Confirmatory authority: **{evidence['confirmatory_authority']}**",
         f"- Scientific criteria passed: **{evidence['scientific_criteria_passed']}**",
         f"- Promotion eligible: **{evidence['promotion_eligible']}**",
         f"- Promotion ceiling: `{profile['promotion_ceiling']}`",
         f"- First failing gate: `{profile['first_failing_gate']}`",
         "",
-        "## Lane estimates",
+        "## Primary-budget lane estimates",
         "",
         "| Lane | Candidate mean [bootstrap CI] | Sign-flip p | Ablation mean [bootstrap CI] |",
         "| --- | --- | ---: | --- |",
@@ -1044,10 +1173,27 @@ def write_confirmatory_representation_bundle(
             "Calibration-frontier values are secondary descriptive evidence and are not averaged "
             "into the primary estimand.",
             "",
-            "Sign-flip p-values and bootstrap intervals are reported for uncertainty; promotion "
-            "still follows the externally registered decision rule, not a hidden p-value cutoff.",
+            "Sign-flip p-values and bootstrap intervals report uncertainty. Promotion follows "
+            "the externally registered decision rule, not a hidden p-value cutoff.",
             "",
         ]
     )
     report_path.write_text("\n".join(lines), encoding="utf-8")
+    run = {
+        "schema_version": 1,
+        "run_id": f"BMRB-confirmatory-{payload['source_fingerprint'][:16]}",
+        "title": "BMRB Confirmatory Representation",
+        "status": "completed",
+        "claim_class": "quantum_inspired",
+        "scientific_fingerprint": payload["source_fingerprint"],
+    }
+    run_path.write_text(json.dumps(run, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    ledger = {
+        path.name: _sha256_file(path)
+        for path in (json_path, report_path, run_path)
+    }
+    ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    verification = verify_run_artifacts(output)
+    if not verification["valid"]:
+        raise RuntimeError(f"confirmatory artifact verification failed: {verification}")
     return json_path, report_path
