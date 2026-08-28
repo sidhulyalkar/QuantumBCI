@@ -30,14 +30,15 @@ jobs:
             tests/test_longitudinal.py \
             tests/test_recapitulation.py
 
-      - name: Qualify installed v0.17 public API
+      - name: Qualify v0.17+ representation public API compatibility
         run: |
           quantumbci-bmrb representation --help
           python - <<'PY'
           from importlib.metadata import version
           import quantumbci
 
-          assert version('quantum-bci') == '0.17.0'
+          release = tuple(int(part) for part in version('quantum-bci').split('.')[:2])
+          assert release >= (0, 17)
           assert quantumbci.BMRB_REPRESENTATION_BENCHMARK == 'BMRB_REPRESENTATION_V1'
           assert quantumbci.REPRESENTATION_CONSERVATION_METHOD_ID == 'participant_balanced_cross_representation_v1'
           assert quantumbci.E001_REPRESENTATION_LANE_SCHEMA == 'quantumbci.e001-representation-lane.v1'

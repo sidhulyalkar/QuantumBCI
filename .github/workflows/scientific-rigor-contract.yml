@@ -1,0 +1,130 @@
+name: Scientific rigor contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-scientific-rigor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  confirmatory-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify preregistration, inference and confirmatory contracts
+        run: |
+          python -m pytest -q \
+            tests/test_preregistration.py \
+            tests/test_inference.py \
+            tests/test_confirmatory_representation.py \
+            tests/test_confirmatory_artifacts.py \
+            tests/test_representation_conservation.py \
+            tests/test_longitudinal.py
+
+      - name: Static-check confirmatory scientific surfaces
+        run: |
+          python -m ruff check \
+            quantumbci/preregistration.py \
+            quantumbci/inference.py \
+            quantumbci/confirmatory_representation.py \
+            quantumbci/confirmatory_cli.py \
+            tests/test_preregistration.py \
+            tests/test_inference.py \
+            tests/test_confirmatory_representation.py \
+            tests/test_confirmatory_artifacts.py \
+            --select E9,F
+
+      - name: Qualify installed confirmatory CLI and policy fingerprinting
+        run: |
+          quantumbci-confirmatory --version
+          cat > /tmp/qbc-policy.json <<'JSON'
+          {
+            "policy_id": "ci-policy",
+            "reference_representation_id": "raw",
+            "primary_calibration_per_class": 10,
+            "primary_classical_control": "normalized_covariance",
+            "min_participants": 3,
+            "min_representations": 2,
+            "min_representation_families": 2,
+            "min_candidate_advantage": 0.01,
+            "min_ablation_necessity": 0.01,
+            "min_reference_positive_fraction": 0.67,
+            "min_all_lane_positive_fraction": 0.67,
+            "min_direction_match_fraction": 0.67,
+            "min_ablation_direction_match_fraction": 0.67,
+            "min_information_novel_representation_fraction": 1.0,
+            "sample_size_rationale": "CI fixture only; not a biological power claim.",
+            "inference_seed": 1801,
+            "bootstrap_resamples": 500,
+            "preregistration": null
+          }
+          JSON
+          quantumbci-confirmatory policy-fingerprint /tmp/qbc-policy.json
+          quantumbci-confirmatory policy-validate /tmp/qbc-policy.json --json > /tmp/qbc-policy-validation.json
+          python - <<'PY'
+          import json
+          payload = json.load(open('/tmp/qbc-policy-validation.json'))
+          assert len(payload['decision_fingerprint']) == 64
+          assert payload['confirmatory_authority'] is False
+          PY
+
+      - name: Keep confirmatory and physical claim ceilings separate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('quantumbci/confirmatory_representation.py').read_text(encoding='utf-8')
+          assert 'primary_calibration_per_class' in source
+          assert 'primary_classical_control' in source
+          assert 'effect_criteria_passed' in source
+          assert 'adversary_survival_passed' in source
+          assert 'conservation_criteria_passed' in source
+          assert 'coverage_criteria_passed' in source
+          assert 'physical_quantum_promotion_eligible' in source
+          assert 'secondary_descriptive_frontier' in source
+          PY
+
+      - name: Qualify release metadata and wheel contents
+        run: |
+          python - <<'PY'
+          from importlib.metadata import version
+          from pathlib import Path
+          import re
+          from packaging.version import Version
+
+          installed = version('quantum-bci')
+          assert Version(installed) >= Version('0.18.0')
+          citation = Path('CITATION.cff').read_text(encoding='utf-8')
+          match = re.search(r'^version:\s*["\x27]?([^"\x27\s]+)["\x27]?\s*$', citation, re.MULTILINE)
+          assert match, 'CITATION.cff version missing'
+          assert match.group(1) == installed
+          assert Path('docs/PUBLISHABILITY_AUDIT.md').is_file()
+          assert Path('docs/CONFIRMATORY_REPRESENTATION.md').is_file()
+          PY
+          rm -rf /tmp/qbc-confirmatory-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-confirmatory-wheel
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          wheels = list(Path('/tmp/qbc-confirmatory-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          expected = {
+              'quantumbci/preregistration.py',
+              'quantumbci/inference.py',
+              'quantumbci/confirmatory_representation.py',
+              'quantumbci/confirmatory_cli.py',
+          }
+          missing = sorted(expected - names)
+          assert not missing, missing
+          PY
