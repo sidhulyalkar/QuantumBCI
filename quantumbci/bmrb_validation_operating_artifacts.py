@@ -7,8 +7,8 @@ an operating-study artifact is reused downstream.
 
 from __future__ import annotations
 
-from itertools import product
 import json
+from itertools import product
 from pathlib import Path
 from typing import Any, Mapping
 

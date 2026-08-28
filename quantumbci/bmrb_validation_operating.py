@@ -13,10 +13,10 @@ executing the evaluation partition.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from itertools import product
-import json
 from pathlib import Path
 from typing import Any, Literal
 
