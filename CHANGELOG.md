@@ -6,6 +6,7 @@ All notable user-facing changes to QuantumBCI are recorded here. Scientific clai
 
 ### Engineering
 
+- Qualify and adopt current major GitHub Actions runtimes for checkout, Python setup, and artifact upload across the inherited workflow matrix.
 - Add a clean sdist/wheel package-quality qualification contract.
 - Define a smaller pre-1.0 root API compatibility-candidate surface.
 - Refresh architecture and release-process documentation around BMRB.
