@@ -222,12 +222,12 @@ def test_evaluation_seal_round_trip_is_canonical_and_verified(tmp_path) -> None:
 
 def test_evaluation_seal_rejects_stale_and_nested_tampering() -> None:
     stale = deepcopy(_seal().to_mapping())
-    stale["plan"]["criteria"][0]["lower_bound"] = 0.70
+    stale["plan"]["criteria"][0]["upper_bound"] = 0.20
     with pytest.raises(ValueError, match="artifact fingerprint mismatch"):
         verify_bmrb_evaluation_seal_mapping(stale)
 
     nested = deepcopy(_seal().to_mapping())
-    nested["plan"]["criteria"][0]["lower_bound"] = 0.70
+    nested["plan"]["criteria"][0]["upper_bound"] = 0.20
     _refingerprint_outer(nested)
     with pytest.raises(ValueError, match="plan fingerprint mismatch"):
         verify_bmrb_evaluation_seal_mapping(nested)
