@@ -13,6 +13,8 @@ All notable user-facing changes to QuantumBCI are recorded here. Scientific clai
 - Require explicit aggregate false-promotion/known-positive recovery criteria plus exact-equivalence, predictive-shortcut, and shared-mechanism scenario criteria without supplying universal numeric thresholds.
 - Add participant-dependence stress DGMs that force unequal session counts and responder mixtures to make row-pooled summaries point in the wrong direction while the production BMRB participant-level estimand remains authoritative.
 - Distinguish structured missing representation pairs as software-invalid evidence that must fail closed, rather than silently converting them into a negative mechanism result.
+- Add a gate-level operating-diagnostics artifact that reports effect/adversary/conservation/coverage confusion counts, truth support, first-failing-gate distributions, false-promotion escape paths, and known-positive loss paths under the same frozen operating authority.
+- Report unsupported gate rates as `null` rather than implying perfect performance; the current DGM family therefore leaves coverage specificity undefined until a dedicated coverage-negative scenario exists.
 
 ### Engineering
 
@@ -25,6 +27,7 @@ All notable user-facing changes to QuantumBCI are recorded here. Scientific clai
 - Add fail-closed round-trip verification for final-evaluation seal artifacts and keep the seal surface physically separate from final-evaluation execution.
 - Remove invalid-escape warnings from mechanistic artifact regex tests without changing test semantics.
 - Extend the known-truth validation workflow to qualify participant-dependence stress tests, claim boundaries, documentation, and installed wheel contents.
+- Add fail-closed read-side verification for gate-diagnostic artifacts, including reconstruction of operating policy/grid/seed authority, per-cell confusion accounting, first-failure partitions, aggregate error-path decompositions, and unsupported-rate nullability.
 
 ## 0.19.0 - 2026-08-28
 
