@@ -29,7 +29,6 @@ from .bmrb_validation import (
     run_validation_replicate,
 )
 
-
 BMRB_OPERATING_CHARACTERISTICS_BENCHMARK = "BMRB_KNOWN_TRUTH_OPERATING_CURVES_V1"
 BMRB_OPERATING_CHARACTERISTICS_METHOD = "frozen_grid_monte_carlo_v1"
 PartitionName = Literal["development", "evaluation"]
