@@ -29,8 +29,8 @@ from .bmrb_validation_operating import (
     BMRBOperatingStudyPolicy,
     OperatingCurveGrid,
     SimulationSeedPartition,
-    _scientific_fingerprint,
     _scaled_scenario,
+    _scientific_fingerprint,
     _wilson_interval,
 )
 
