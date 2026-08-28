@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 
 import pytest
@@ -9,10 +10,15 @@ from quantumbci.bmrb_validation_operating import (
     BMRBOperatingStudyPolicy,
     OperatingCurveGrid,
     SimulationSeedPartition,
+    _scientific_fingerprint,
     qualification_smoke_grid,
     recommended_development_grid,
     run_bmrb_operating_characteristics,
     write_bmrb_operating_characteristics,
+)
+from quantumbci.bmrb_validation_operating_artifacts import (
+    load_bmrb_operating_characteristics,
+    verify_bmrb_operating_characteristics_mapping,
 )
 
 
@@ -24,6 +30,14 @@ def _smoke_policy(*, partition: str = "development") -> BMRBOperatingStudyPolicy
         grid=qualification_smoke_grid(),
         replicates_per_cell=2,
         bootstrap_resamples=100,
+    )
+
+
+def _refingerprint(payload: dict) -> None:
+    core = {key: value for key, value in payload.items() if key != "artifact_fingerprint"}
+    payload["artifact_fingerprint"] = _scientific_fingerprint(
+        "quantumbci.bmrb-operating-result.v1",
+        core,
     )
 
 
@@ -144,6 +158,47 @@ def test_operating_artifact_round_trip_preserves_fingerprint(tmp_path) -> None:
     assert payload["artifact_fingerprint"] == result.artifact_fingerprint
     assert payload["qualification_defined"] is False
     assert "does not validate biological truth" in payload["interpretation"]
+    verify_bmrb_operating_characteristics_mapping(payload)
+    assert load_bmrb_operating_characteristics(output) == payload
+
+
+def test_operating_verifier_rejects_stale_artifact_fingerprint() -> None:
+    payload = run_bmrb_operating_characteristics(_smoke_policy()).to_mapping()
+    payload["cells"][0]["base_seed"] += 1
+
+    with pytest.raises(ValueError, match="artifact fingerprint mismatch"):
+        verify_bmrb_operating_characteristics_mapping(payload)
+
+
+def test_operating_verifier_rejects_semantic_tampering_even_after_refingerprint() -> None:
+    original = run_bmrb_operating_characteristics(_smoke_policy()).to_mapping()
+
+    bad_seed = deepcopy(original)
+    bad_seed["cells"][0]["base_seed"] += 1
+    _refingerprint(bad_seed)
+    with pytest.raises(ValueError, match="base seed"):
+        verify_bmrb_operating_characteristics_mapping(bad_seed)
+
+    bad_truth = deepcopy(original)
+    bad_truth["cells"][0]["expected_scientific_pass"] = True
+    _refingerprint(bad_truth)
+    with pytest.raises(ValueError, match="expected scientific result"):
+        verify_bmrb_operating_characteristics_mapping(bad_truth)
+
+    invented_gate = deepcopy(original)
+    invented_gate["qualification_defined"] = True
+    _refingerprint(invented_gate)
+    with pytest.raises(ValueError, match="must not invent"):
+        verify_bmrb_operating_characteristics_mapping(invented_gate)
+
+
+def test_operating_verifier_rejects_nested_policy_tampering() -> None:
+    payload = run_bmrb_operating_characteristics(_smoke_policy()).to_mapping()
+    payload["policy"]["primary_calibration_per_class"] = 9
+    _refingerprint(payload)
+
+    with pytest.raises(ValueError, match="policy fingerprint mismatch"):
+        verify_bmrb_operating_characteristics_mapping(payload)
 
 
 def test_unknown_scenario_fails_closed_before_simulation() -> None:
