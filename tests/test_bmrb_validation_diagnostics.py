@@ -29,6 +29,7 @@ def diagnostic_policy() -> BMRBOperatingStudyPolicy:
                 "effect-null",
                 "equivalence-null",
                 "predictive-shortcut",
+                "coverage-insufficient-family-support",
                 "shared-mechanism-positive",
             ),
             participant_counts=(8,),
@@ -60,26 +61,28 @@ def test_gate_diagnostics_localize_declared_failure_modes() -> None:
     assert cells["effect-null"]["first_failing_gate_counts"]["effect"] == 4
     assert cells["equivalence-null"]["first_failing_gate_counts"]["adversary"] == 4
     assert cells["predictive-shortcut"]["first_failing_gate_counts"]["conservation"] == 4
+    assert cells["coverage-insufficient-family-support"]["first_failing_gate_counts"][
+        "coverage"
+    ] == 4
     assert cells["shared-mechanism-positive"]["first_failing_gate_counts"]["none"] == 4
     assert all(cell["first_failure_localization_rate"] == 1.0 for cell in cells.values())
 
 
-def test_gate_confusion_reports_truth_support_without_inventing_coverage_specificity() -> None:
+def test_gate_confusion_measures_all_four_gate_truth_classes() -> None:
     result = run_bmrb_gate_diagnostics(diagnostic_policy())
     gates = result.to_mapping()["aggregate"]["gate_confusion"]
 
-    for gate in ("effect", "adversary", "conservation"):
+    for gate in GATE_ORDER:
         assert gates[gate]["pass_sensitivity"] == pytest.approx(1.0)
         assert gates[gate]["failure_specificity"] == pytest.approx(1.0)
         assert gates[gate]["false_pass_rate"] == pytest.approx(0.0)
         assert gates[gate]["false_fail_rate"] == pytest.approx(0.0)
+        assert gates[gate]["expected_pass_support"] > 0
         assert gates[gate]["expected_failure_support"] > 0
 
     coverage = gates["coverage"]
-    assert coverage["pass_sensitivity"] == pytest.approx(1.0)
-    assert coverage["expected_failure_support"] == 0
-    assert coverage["failure_specificity"] is None
-    assert coverage["false_pass_rate"] is None
+    assert coverage["expected_failure_support"] == 4
+    assert coverage["true_negative"] == 4
 
 
 def test_gate_diagnostics_decompose_false_promotion_and_positive_loss_paths() -> None:
