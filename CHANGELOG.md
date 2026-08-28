@@ -4,12 +4,19 @@ All notable user-facing changes to QuantumBCI are recorded here. Scientific clai
 
 ## Unreleased
 
+### Scientific validation
+
+- Add a frozen BMRB operating-characteristics study layer that reuses the production known-truth/confirmatory evaluator over predeclared participant, effect, heterogeneity, and measurement-noise grids.
+- Separate development and final-evaluation Monte Carlo seed authority with fingerprinted, non-overlapping deterministic partitions.
+- Report per-cell decision error, Monte Carlo standard error, Wilson pass-rate intervals, failure localization, reference-effect bias/RMSE, and participant-bootstrap interval coverage without defining universal biological qualification thresholds.
+
 ### Engineering
 
 - Qualify and adopt current major GitHub Actions runtimes for checkout, Python setup, and artifact upload across the inherited workflow matrix.
 - Add a clean sdist/wheel package-quality qualification contract.
 - Define a smaller pre-1.0 root API compatibility-candidate surface.
-- Refresh architecture and release-process documentation around BMRB.
+- Add an executable static-debt ratchet that prevents broad-exception and typing-suppression debt from silently spreading.
+- Refresh architecture, release-process, API-stability, and code-quality documentation around BMRB.
 - Add structured issue templates for software defects, scientific-validity concerns, and research proposals.
 
 ## 0.19.0 - 2026-08-28
