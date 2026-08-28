@@ -157,7 +157,7 @@ def test_operating_artifact_round_trip_preserves_fingerprint(tmp_path) -> None:
     assert payload["policy"]["policy_fingerprint"] == result.policy.policy_fingerprint
     assert payload["artifact_fingerprint"] == result.artifact_fingerprint
     assert payload["qualification_defined"] is False
-    assert "does not validate biological truth" in payload["interpretation"]
+    assert "do not validate biological truth" in payload["interpretation"]
     verify_bmrb_operating_characteristics_mapping(payload)
     assert load_bmrb_operating_characteristics(output) == payload
 
