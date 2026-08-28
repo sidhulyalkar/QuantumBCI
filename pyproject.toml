@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantum-bci"
-version = "0.18.0"
+version = "0.19.0"
 description = "A falsifiable research workbench for testing quantum-structured and classical neural mechanism hypotheses."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -71,6 +71,7 @@ quantumbci-audit = "quantumbci.audit_cli:main"
 quantumbci-kumar2024 = "quantumbci.studies.kumar2024_cli:main"
 quantumbci-bmrb = "quantumbci.bmrb_cli:main"
 quantumbci-confirmatory = "quantumbci.confirmatory_cli:main"
+quantumbci-bmrb-validate = "quantumbci.bmrb_validation_cli:main"
 
 [project.entry-points."neuros.transforms"]
 quantumbci-density = "quantumbci.integrations.neuros:DensityGeometryTransform"

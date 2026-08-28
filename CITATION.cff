@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.18.0"
+version: "0.19.0"
 keywords:
   - neuroscience
   - EEG
@@ -20,6 +20,8 @@ keywords:
   - mathematical equivalence
   - preregistration
   - confirmatory analysis
+  - benchmark validation
+  - known-ground-truth simulation
   - longitudinal evaluation
   - participant-level inference
   - open-system dynamics
