@@ -123,7 +123,8 @@ jobs:
           operating_docs = Path('docs/BMRB_OPERATING_CHARACTERISTICS.md').read_text(encoding='utf-8')
           assert 'does not validate biological truth' in source
           assert 'not biological truth' in stress
-          assert 'do not validate biological truth' in operating
+          assert 'qualification_defined": False' in operating
+          assert 'validate biological truth' in operating
           assert 'not a certificate of biological truth' in docs
           assert 'do **not** establish' in operating_docs
           assert 'physical quantum' in docs.lower()
