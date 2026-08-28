@@ -11,7 +11,7 @@ does not reimplement its gates, so a regression in BMRB decision semantics is vi
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Iterable
 
 import numpy as np
@@ -133,12 +133,12 @@ class BMRBValidationScenarioSummary:
 
 
 def default_validation_scenarios() -> tuple[BMRBValidationScenario, ...]:
-    """Return the first ADEMP-style known-truth adversary grid.
+    """Return the ADEMP-style known-truth adversary grid.
 
     The scenarios isolate distinct questions rather than collapsing them into one score:
     effect-null rejection, mathematical-equivalence rejection, true shared-mechanism
-    recovery, shortcut rejection, representation-specific failure, and calibration-budget
-    reversal.
+    recovery, shortcut rejection, representation-specific failure, coverage sufficiency,
+    and calibration-budget reversal.
     """
 
     return (
@@ -198,6 +198,17 @@ def default_validation_scenarios() -> tuple[BMRBValidationScenario, ...]:
             information_novel=True,
         ),
         BMRBValidationScenario(
+            scenario_id="coverage-insufficient-family-support",
+            truth_class="adversarial",
+            expected_scientific_pass=False,
+            expected_failure_component="coverage",
+            reference_effect=0.12,
+            alternate_effect=0.115,
+            reference_ablation=0.10,
+            alternate_ablation=0.095,
+            information_novel=True,
+        ),
+        BMRBValidationScenario(
             scenario_id="calibration-reversal",
             truth_class="known_positive",
             expected_scientific_pass=True,
@@ -250,6 +261,43 @@ def validation_policy(
         inference_seed=inference_seed,
         bootstrap_resamples=bootstrap_resamples,
         preregistration=None,
+    )
+
+
+def validation_policy_for_scenario(
+    scenario: BMRBValidationScenario,
+    *,
+    participants: int = 8,
+    primary_calibration_per_class: int = 10,
+    inference_seed: int = 1901,
+    bootstrap_resamples: int = 300,
+) -> ConfirmatoryRepresentationPolicy:
+    """Return the exact validation policy needed to isolate one scenario's declared truth.
+
+    The coverage-negative DGM intentionally keeps two valid exact-paired representation
+    families while preregistering a requirement for three. This changes only the coverage
+    requirement; effect, adversary, conservation, pairing, and participant inference remain
+    on the same production path as every other known-truth scenario.
+    """
+
+    policy = validation_policy(
+        participants=participants,
+        primary_calibration_per_class=primary_calibration_per_class,
+        inference_seed=inference_seed,
+        bootstrap_resamples=bootstrap_resamples,
+    )
+    if scenario.scenario_id != "coverage-insufficient-family-support":
+        return policy
+    if scenario.expected_failure_component != "coverage":
+        raise ValueError("coverage-negative scenario must declare coverage as its failure component")
+    return replace(
+        policy,
+        policy_id="bmrb-known-truth-validation-v1-coverage-negative",
+        min_representation_families=3,
+        sample_size_rationale=(
+            "Synthetic coverage-negative validation: exact-paired positive evidence supplies "
+            "two representation families against a preregistered requirement for three."
+        ),
     )
 
 
@@ -345,7 +393,8 @@ def run_validation_replicate(
     """Run one deterministic known-truth replicate through production BMRB semantics."""
 
     rng = np.random.default_rng(int(seed) + int(replicate) * 1009)
-    policy = validation_policy(
+    policy = validation_policy_for_scenario(
+        scenario,
         participants=participants,
         primary_calibration_per_class=primary_calibration_per_class,
         inference_seed=int(seed) + int(replicate) * 17,
@@ -449,7 +498,7 @@ def run_bmrb_validation_suite(
     participants: int = 8,
     bootstrap_resamples: int = 300,
 ) -> dict[str, Any]:
-    """Run the first known-ground-truth BMRB validation program."""
+    """Run the known-ground-truth BMRB validation program."""
 
     if replicates < 1:
         raise ValueError("replicates must be positive")
