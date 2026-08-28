@@ -102,6 +102,17 @@ from .probabilistic_ssm import (
 )
 from .recipes import FrozenEmbeddingRecipe, RecipeRunResult, load_recipe, run_recipe
 from .spectral import amplitude_encode, classical_fft, qft_probabilities, qft_state
+from .stability import (
+    BOOTSTRAP_METHOD_ID,
+    DEFAULT_BOOTSTRAP_REPLICATES,
+    DEFAULT_BOOTSTRAP_SEED,
+    DEFAULT_MIN_SUCCESS_FRACTION,
+    BootstrapReplicate,
+    BootstrapScalarSummary,
+    E002BootstrapStabilityResult,
+    NonlinearSelectionStability,
+    run_e002_bootstrap_stability,
+)
 from .states import density_from_samples, l1_coherence, purity, von_neumann_entropy
 from .switching_dynamics import (
     LABEL_CANONICALIZATION_ID,
@@ -122,14 +133,20 @@ from .trajectory_authority import (
 )
 
 __all__ = [
+    "BOOTSTRAP_METHOD_ID",
     "BatchEquivalenceAudit",
     "BenchmarkMetrics",
     "BlochAffineGenerator",
+    "BootstrapReplicate",
+    "BootstrapScalarSummary",
     "CANONICAL_STRUCTURE_RESIDUAL_MAX",
     "CLASSICAL_ADVERSARY_RESIDUAL_MIN",
     "CanonicalQubitParameters",
     "ClaimClass",
     "ClassicalControlLaneResult",
+    "DEFAULT_BOOTSTRAP_REPLICATES",
+    "DEFAULT_BOOTSTRAP_SEED",
+    "DEFAULT_MIN_SUCCESS_FRACTION",
     "DIRECT_DISCRETE_ESTIMATOR_ID",
     "DIRECT_GAUSSIAN_BASELINE_ID",
     "DISCRETE_ROLLOUT_ID",
@@ -138,6 +155,7 @@ __all__ = [
     "DynamicsLaneResult",
     "DynamicsMetrics",
     "E001RepresentationBenchmarkResult",
+    "E002BootstrapStabilityResult",
     "ExtendedClassicalControlsResult",
     "FEATURE_COUNTS",
     "FIT_ESTIMATOR_ID",
@@ -157,6 +175,7 @@ __all__ = [
     "NonlinearControlResult",
     "NonlinearMetrics",
     "NonlinearResidualModel",
+    "NonlinearSelectionStability",
     "PROBABILISTIC_MODEL_ID",
     "PairedBootstrapSummary",
     "PredictiveDensityMetrics",
@@ -221,6 +240,7 @@ __all__ = [
     "qft_state",
     "qlsa_diagnostics",
     "recover_canonical_parameters",
+    "run_e002_bootstrap_stability",
     "run_e002_synthetic_recovery_grid",
     "run_extended_classical_controls",
     "run_longitudinal_e001_case",

@@ -1,0 +1,132 @@
+name: E002 bootstrap stability contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-e002-stability-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify trajectory-block stability kernel and full-chain task
+        run: |
+          python -m pytest -q tests/test_stability.py tests/test_stability_task.py
+
+      - name: Qualify safe root stability surface
+        run: |
+          python - <<'PY'
+          import quantumbci
+          assert quantumbci.BOOTSTRAP_METHOD_ID == 'role_stratified_trajectory_block_bootstrap_v1'
+          assert quantumbci.DEFAULT_BOOTSTRAP_SEED == 1401
+          assert quantumbci.DEFAULT_BOOTSTRAP_REPLICATES == 200
+          assert quantumbci.DEFAULT_MIN_SUCCESS_FRACTION == 0.90
+          assert callable(quantumbci.run_e002_bootstrap_stability)
+          PY
+
+      - name: Keep statistical and mechanistic claim ceilings explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('quantumbci/stability.py').read_text(encoding='utf-8')
+          assert 'single_case_bootstrap_is_icc' in source
+          assert 'participant_icc_computed' in source
+          assert 'evaluation_resampled' in source
+          assert 'intervention_stage_eligible' in source
+          assert 'physical_quantum_promotion_eligible' in source
+          PY
+
+      - name: Qualify E002 stability DAG and packaged manifest identity
+        run: |
+          quantumbci experiments validate E002_lindblad_dynamics --json
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          source = json.loads(Path('experiments/manifests/E002_lindblad_dynamics.json').read_text())
+          packaged = json.loads(Path('quantumbci/experiments/manifests/E002_lindblad_dynamics.json').read_text())
+          assert source == packaged
+          stages = {stage['id']: stage for stage in source['stages']}
+          nonlinear = stages['fit_flexible_nonlinear_control']
+          stability = stages['bootstrap_stability']
+          interventions = stages['interventions']
+          assert stability['depends_on'] == ['fit_flexible_nonlinear_control']
+          assert stability['command'][:3] == [
+              'python', '-m', 'quantumbci.experiments.stability_task'
+          ]
+          for required in (
+              '--descriptor', 'trajectory_contract.json',
+              '--trajectory-index', 'trajectory_index.json',
+              '--matched', 'matched_dynamics.json',
+              '--classical-controls', 'classical_controls.json',
+              '--probabilistic-ssm', 'probabilistic_ssm.json',
+              '--switching-state', 'switching_state.json',
+              '--nonlinear-control', 'nonlinear_control.json',
+              '--replicates', '200',
+              '--seed', '1401',
+              '--minimum-success-fraction', '0.90',
+              '--output', 'bootstrap_stability.json',
+          ):
+              assert required in stability['command']
+          assert stability['produces'] == ['bootstrap_stability.json']
+          assert nonlinear['produces'] == ['nonlinear_control.json']
+          assert interventions['depends_on'] == [
+              'fit_matched_baseline',
+              'fit_extended_classical_controls',
+              'fit_probabilistic_state_space_control',
+              'fit_switching_state_control',
+              'fit_flexible_nonlinear_control',
+              'bootstrap_stability',
+          ]
+          assert 'bootstrap_parameter_icc' not in source['primary_metrics']
+          assert 'repeated_case_parameter_icc' in source['primary_metrics']
+          PY
+
+      - name: Keep intervention route fail-closed
+        run: |
+          set +e
+          python -m quantumbci.experiments.tasks dynamics-interventions E002 > /tmp/v014-interventions.json
+          code=$?
+          set -e
+          test "$code" -eq 3
+          python - <<'PY'
+          import json
+          assert json.load(open('/tmp/v014-interventions.json'))['status'] == 'not_implemented'
+          PY
+
+      - name: Qualify v0.14 wheel contents
+        run: |
+          rm -rf /tmp/quantumbci-stability-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-stability-wheel
+          python - <<'PY'
+          from importlib.metadata import version
+          from pathlib import Path
+          import zipfile
+          wheels = list(Path('/tmp/quantumbci-stability-wheel').glob('quantum_bci-*.whl'))
+          assert len(wheels) == 1, wheels
+          installed_version = version('quantum-bci')
+          assert installed_version == '0.14.0'
+          assert f'quantum_bci-{installed_version}-' in wheels[0].name
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          expected = {
+              'quantumbci/stability.py',
+              'quantumbci/experiments/stability_task.py',
+              'quantumbci/nonlinear_dynamics.py',
+              'quantumbci/experiments/nonlinear_control_task.py',
+              'quantumbci/experiments/manifests/E002_lindblad_dynamics.json',
+          }
+          missing = sorted(expected - names)
+          assert not missing, f'bootstrap stability files missing from wheel: {missing}'
+          PY

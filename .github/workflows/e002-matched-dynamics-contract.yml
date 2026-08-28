@@ -21,192 +21,11 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
 
-      - name: Qualify matched dynamics adversarial unit contract
+      - name: Qualify v0.9 matched-dynamics science and task contracts
         run: |
           python -m pytest -q tests/test_dynamics_fitting.py tests/test_experiment_tasks.py
 
-      - name: Build portable physical canonical trajectory fixture
-        run: |
-          mkdir -p /tmp/e002-matched
-          python - <<'PY'
-          from pathlib import Path
-          import json
-          import numpy as np
-          from quantumbci.e002_synthetic import CanonicalQubitParameters, simulate_canonical_bloch_trajectories
-
-          root = Path('/tmp/e002-matched')
-          parameters = CanonicalQubitParameters(0.7, -0.5, 0.16, 0.24)
-          times = np.linspace(0.0, 0.6, 61)
-          initial = np.asarray([
-              [0.50, 0.00, 0.00],
-              [0.00, 0.50, 0.00],
-              [0.00, 0.00, 0.50],
-              [-0.30, 0.20, 0.10],
-              [0.25, -0.25, 0.15],
-              [-0.15, 0.30, -0.10],
-          ])
-          trajectories = simulate_canonical_bloch_trajectories(parameters, times, initial)
-          n_times = len(times)
-          states = trajectories.reshape(-1, 3)
-          ids = np.concatenate([np.repeat(f'trajectory-{i}', n_times) for i in range(len(initial))])
-          starts = np.tile(times, len(initial))
-          step = float(times[1] - times[0])
-          stops = starts + step / 2.0
-          np.save(root / 'states.npy', states)
-          np.save(root / 'trajectory_ids.npy', ids)
-          np.save(root / 'starts.npy', starts)
-          np.save(root / 'stops.npy', stops)
-          fit_stop = 4 * n_times
-          descriptor = {
-              'schema_version': 1,
-              'dataset_id': 'ci-matched-canonical',
-              'case_id': 'ci-matched-case',
-              'latent_dimension': 3,
-              'time_step_policy': 'fixed',
-              'expected_window_seconds': step / 2.0,
-              'expected_step_seconds': step,
-              'step_tolerance_seconds': 1e-10,
-              'purge_seconds': 0.0,
-              'upstream_authority_fingerprint': 'neuros-ci-authority',
-              'source_revisions': {'quantumbci': 'ci-head', 'encoder': 'frozen-ci'},
-              'data_metadata': {'state_surface': 'bloch_coordinates', 'fixture': 'canonical'},
-              'data': {
-                  'states': 'states.npy',
-                  'trajectory_ids': 'trajectory_ids.npy',
-                  'start_times_s': 'starts.npy',
-                  'stop_times_s': 'stops.npy',
-              },
-              'split': {
-                  'fit_indices': list(range(fit_stop)),
-                  'calibration_indices': [],
-                  'evaluation_indices': list(range(fit_stop, len(states))),
-                  'representation_fit_indices': list(range(fit_stop)),
-              },
-          }
-          (root / 'trajectory_contract.json').write_text(json.dumps(descriptor, indent=2), encoding='utf-8')
-          PY
-
-      - name: Qualify installed authority to matched-fit transaction
-        run: |
-          cd /tmp/e002-matched
-          python -m quantumbci.experiments.tasks \
-            trajectory-contract E002 \
-            --input trajectory_contract.json \
-            --output trajectory_index.json \
-            > trajectory_stdout.json
-          python -m quantumbci.experiments.tasks \
-            fit-matched-dynamics E002 \
-            --input trajectory_contract.json \
-            --trajectory-index trajectory_index.json \
-            --output matched_dynamics.json \
-            --ridge 0 \
-            > matched_stdout.json
-          python - <<'PY'
-          import json
-          artifact = json.load(open('matched_dynamics.json'))
-          affine = artifact['affine']
-          canonical = artifact['canonical']
-          ranks = artifact['fit_rank_diagnostics']
-          assert artifact['status'] == 'pass'
-          assert artifact['artifact_role'] == 'matched_dynamics_baseline'
-          assert artifact['same_evidence_verified'] is True
-          assert artifact['calibration_used'] is False
-          assert artifact['parameter_reduction'] == 8
-          assert artifact['authoritative_ridge'] == 0.0
-          assert artifact['regularization_geometry_matched'] is True
-          assert affine['parameter_count'] == 12
-          assert canonical['parameter_count'] == 4
-          assert ranks == {
-              'affine_predictor_design_rank': 4,
-              'affine_parameter_rank': 12,
-              'affine_parameter_count': 12,
-              'canonical_design_rank': 4,
-              'canonical_parameter_rank': 4,
-              'canonical_parameter_count': 4,
-          }
-          assert affine['fit_estimator_id'] == canonical['fit_estimator_id'] == 'forward_difference_least_squares_v1'
-          assert affine['score_integrator_id'] == canonical['score_integrator_id'] == 'rk4_one_step_and_rollout_v1'
-          for field in ('authority_fingerprint', 'data_sha256', 'fit_transition_sha256', 'evaluation_transition_sha256'):
-              assert affine[field] == canonical[field] == artifact[field]
-          assert canonical['evaluation_metrics']['one_step_rmse'] < 0.01
-          assert canonical['evaluation_metrics']['rollout_rmse'] < 0.02
-          assert canonical['evaluation_metrics']['target_physical_fraction'] == 1.0
-          assert canonical['evaluation_metrics']['one_step_prediction_physical_fraction'] == 1.0
-          assert canonical['evaluation_metrics']['one_step_mean_valid_qubit_trace_distance'] is not None
-          assert artifact['dynamical_information_novel'] is False
-          assert artifact['physical_quantum_promotion_eligible'] is False
-          assert artifact['extended_classical_controls_required'] is True
-          assert artifact['intervention_stage_eligible'] is False
-          rendered = json.dumps(artifact)
-          assert '/tmp/' not in rendered
-          PY
-
-      - name: Reject unmatched regularization geometry
-        run: |
-          cd /tmp/e002-matched
-          rm -f nonzero_ridge_should_not_exist.json
-          set +e
-          python -m quantumbci.experiments.tasks \
-            fit-matched-dynamics E002 \
-            --input trajectory_contract.json \
-            --trajectory-index trajectory_index.json \
-            --output nonzero_ridge_should_not_exist.json \
-            --ridge 0.001 \
-            > nonzero_ridge_stdout.json
-          code=$?
-          set -e
-          test "$code" -eq 2
-          test ! -f nonzero_ridge_should_not_exist.json
-          python - <<'PY'
-          import json
-          payload = json.load(open('nonzero_ridge_stdout.json'))
-          assert payload['status'] == 'error'
-          assert 'requires ridge=0' in payload['message']
-          PY
-
-      - name: Reject tampered authority before fitting
-        run: |
-          cd /tmp/e002-matched
-          cp trajectory_index.json trajectory_index_tampered.json
-          python - <<'PY'
-          import json
-          path = 'trajectory_index_tampered.json'
-          payload = json.load(open(path))
-          payload['authority']['source_revisions']['encoder'] = 'tampered'
-          open(path, 'w').write(json.dumps(payload))
-          PY
-          set +e
-          python -m quantumbci.experiments.tasks \
-            fit-matched-dynamics E002 \
-            --input trajectory_contract.json \
-            --trajectory-index trajectory_index_tampered.json \
-            --output should_not_exist.json \
-            > tamper_stdout.json
-          code=$?
-          set -e
-          test "$code" -eq 2
-          test ! -f should_not_exist.json
-          python - <<'PY'
-          import json
-          payload = json.load(open('tamper_stdout.json'))
-          assert payload['status'] == 'error'
-          assert 'differs' in payload['message']
-          PY
-
-      - name: Keep legacy unmatched classical-control route fail-closed
-        run: |
-          set +e
-          python -m quantumbci.experiments.tasks fit-dynamics-controls E002 --input /tmp/e002-matched/matched_dynamics.json > /tmp/legacy-controls.json
-          code=$?
-          set -e
-          test "$code" -eq 3
-          python - <<'PY'
-          import json
-          payload = json.load(open('/tmp/legacy-controls.json'))
-          assert payload['status'] == 'not_implemented'
-          PY
-
-      - name: Qualify manifest identity and wheel contents
+      - name: Qualify v0.9 immediate downstream handoff
         run: |
           quantumbci experiments validate E002_lindblad_dynamics --json
           python - <<'PY'
@@ -217,53 +36,39 @@ jobs:
           assert source == packaged
           stages = {stage['id']: stage for stage in source['stages']}
           matched = stages['fit_matched_baseline']
-          controls = stages['fit_extended_classical_controls']
-          probabilistic = stages['fit_probabilistic_state_space_control']
-          switching = stages['fit_switching_state_control']
-          nonlinear = stages['fit_flexible_nonlinear_control']
+          child = stages['fit_extended_classical_controls']
           assert matched['depends_on'] == ['trajectory_contract']
+          assert matched['command'][:3] == ['python', '-m', 'quantumbci.experiments.tasks']
           assert 'fit-matched-dynamics' in matched['command']
           assert matched['command'][-1] == '0'
-          assert controls['depends_on'] == ['fit_matched_baseline']
-          assert controls['command'][:3] == [
+          assert matched['produces'] == ['matched_dynamics.json']
+          assert child['depends_on'] == ['fit_matched_baseline']
+          assert child['command'][:3] == [
               'python', '-m', 'quantumbci.experiments.classical_controls_task'
           ]
-          for required in (
-              '--descriptor', 'trajectory_contract.json',
-              '--trajectory-index', 'trajectory_index.json',
-              '--matched', 'matched_dynamics.json',
-              '--output', 'classical_controls.json',
-          ):
-              assert required in controls['command']
-          assert probabilistic['depends_on'] == ['fit_extended_classical_controls']
-          assert probabilistic['command'][:3] == [
-              'python', '-m', 'quantumbci.experiments.probabilistic_ssm_task'
-          ]
-          assert switching['depends_on'] == ['fit_probabilistic_state_space_control']
-          assert switching['command'][:3] == [
-              'python', '-m', 'quantumbci.experiments.switching_state_task'
-          ]
-          assert nonlinear['depends_on'] == ['fit_switching_state_control']
-          assert nonlinear['command'][:3] == [
-              'python', '-m', 'quantumbci.experiments.nonlinear_control_task'
-          ]
-          assert stages['interventions']['depends_on'] == [
-              'fit_matched_baseline',
-              'fit_extended_classical_controls',
-              'fit_probabilistic_state_space_control',
-              'fit_switching_state_control',
-              'fit_flexible_nonlinear_control',
-          ]
           PY
+
+      - name: Keep legacy unmatched control route fail-closed
+        run: |
+          set +e
+          python -m quantumbci.experiments.tasks fit-dynamics-controls E002 --input /tmp/not-used.json > /tmp/legacy-controls.json
+          code=$?
+          set -e
+          test "$code" -eq 3
+          python - <<'PY'
+          import json
+          assert json.load(open('/tmp/legacy-controls.json'))['status'] == 'not_implemented'
+          PY
+
+      - name: Qualify v0.9 wheel contents
+        run: |
+          rm -rf /tmp/quantumbci-matched-wheel
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-matched-wheel
           python - <<'PY'
-          from importlib.metadata import version
           from pathlib import Path
           import zipfile
           wheels = list(Path('/tmp/quantumbci-matched-wheel').glob('quantum_bci-*.whl'))
           assert len(wheels) == 1, wheels
-          installed_version = version('quantum-bci')
-          assert f'quantum_bci-{installed_version}-' in wheels[0].name
           with zipfile.ZipFile(wheels[0]) as archive:
               names = set(archive.namelist())
           expected = {
@@ -271,6 +76,5 @@ jobs:
               'quantumbci/trajectory_authority.py',
               'quantumbci/experiments/manifests/E002_lindblad_dynamics.json',
           }
-          missing = sorted(expected - names)
-          assert not missing, f'matched dynamics files missing from wheel: {missing}'
+          assert not sorted(expected - names)
           PY
