@@ -13,8 +13,8 @@ jobs:
   contract:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -145,14 +145,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout QuantumBCI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout pinned neurOS mechanistic contracts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: sidhulyalkar/neurOS-v1
           ref: 8712e245037e7b238da22a1b9e3d9631b5226c88
           path: _deps/neuros-v1
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
