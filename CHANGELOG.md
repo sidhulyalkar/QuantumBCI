@@ -9,6 +9,8 @@ All notable user-facing changes to QuantumBCI are recorded here. Scientific clai
 - Add a frozen BMRB operating-characteristics study layer that reuses the production known-truth/confirmatory evaluator over predeclared participant, effect, heterogeneity, and measurement-noise grids.
 - Separate development and final-evaluation Monte Carlo seed authority with fingerprinted, non-overlapping deterministic partitions.
 - Report per-cell decision error, Monte Carlo standard error, Wilson pass-rate intervals, failure localization, reference-effect bias/RMSE, and participant-bootstrap interval coverage without defining universal biological qualification thresholds.
+- Add a preregisterable BMRB final-evaluation seal that binds development evidence, the exact future evaluation policy, explicit caller-supplied acceptance bounds, multiplicity policy, and external preregistration before evaluation seeds may be observed.
+- Require explicit aggregate false-promotion/known-positive recovery criteria plus exact-equivalence, predictive-shortcut, and shared-mechanism scenario criteria without supplying universal numeric thresholds.
 
 ### Engineering
 
@@ -18,6 +20,7 @@ All notable user-facing changes to QuantumBCI are recorded here. Scientific clai
 - Add an executable static-debt ratchet that prevents broad-exception and typing-suppression debt from silently spreading.
 - Refresh architecture, release-process, API-stability, and code-quality documentation around BMRB.
 - Add structured issue templates for software defects, scientific-validity concerns, and research proposals.
+- Add fail-closed round-trip verification for final-evaluation seal artifacts and keep the seal surface physically separate from final-evaluation execution.
 
 ## 0.19.0 - 2026-08-28
 

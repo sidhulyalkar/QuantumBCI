@@ -26,7 +26,8 @@ jobs:
           python -m pytest -q \
             tests/test_bmrb_validation.py \
             tests/test_bmrb_validation_stress.py \
-            tests/test_bmrb_validation_operating.py
+            tests/test_bmrb_validation_operating.py \
+            tests/test_bmrb_evaluation_seal.py
 
       - name: Static-check validation surfaces
         run: |
@@ -35,10 +36,12 @@ jobs:
             quantumbci/bmrb_validation_stress.py \
             quantumbci/bmrb_validation_operating.py \
             quantumbci/bmrb_validation_operating_artifacts.py \
+            quantumbci/bmrb_evaluation_seal.py \
             quantumbci/bmrb_validation_cli.py \
             tests/test_bmrb_validation.py \
             tests/test_bmrb_validation_stress.py \
-            tests/test_bmrb_validation_operating.py
+            tests/test_bmrb_validation_operating.py \
+            tests/test_bmrb_evaluation_seal.py
 
       - name: Qualify installed validation CLI
         run: |
@@ -124,6 +127,106 @@ jobs:
           assert loaded['artifact_fingerprint'] == result.artifact_fingerprint
           PY
 
+      - name: Qualify preregistered final-evaluation seal
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          from quantumbci.bmrb_evaluation_seal import (
+              BMRBEvaluationSeal,
+              BMRBOperatingAcceptancePlan,
+              OperatingAcceptanceCriterion,
+              load_bmrb_evaluation_seal,
+              write_bmrb_evaluation_seal,
+          )
+          from quantumbci.bmrb_validation_operating import (
+              BMRBOperatingStudyPolicy,
+              OperatingCurveGrid,
+          )
+          from quantumbci.preregistration import PreregistrationEvidence
+
+          evaluation_policy = BMRBOperatingStudyPolicy(
+              study_id='ci-sealed-evaluation',
+              source_sha='github-actions',
+              partition='evaluation',
+              grid=OperatingCurveGrid(
+                  scenario_ids=(
+                      'equivalence-null',
+                      'predictive-shortcut',
+                      'shared-mechanism-positive',
+                  ),
+                  participant_counts=(8,),
+                  effect_scales=(1.0,),
+                  heterogeneity_scales=(1.0,),
+                  measurement_noise_scales=(1.0,),
+              ),
+              replicates_per_cell=2,
+              bootstrap_resamples=100,
+          )
+          criteria = (
+              OperatingAcceptanceCriterion(
+                  criterion_id='false-promotion',
+                  metric='aggregate.false_promotion_rate',
+                  upper_bound=0.20,
+                  rationale='CI-only threshold used to qualify serialization.',
+              ),
+              OperatingAcceptanceCriterion(
+                  criterion_id='positive-recovery',
+                  metric='aggregate.known_positive_recovery_rate',
+                  lower_bound=0.80,
+                  rationale='CI-only threshold used to qualify serialization.',
+              ),
+              OperatingAcceptanceCriterion(
+                  criterion_id='equivalence-null',
+                  metric='scenario.observed_pass_rate',
+                  scenario_id='equivalence-null',
+                  reducer='maximum',
+                  upper_bound=0.20,
+                  rationale='CI-only explicit equivalence-null endpoint.',
+              ),
+              OperatingAcceptanceCriterion(
+                  criterion_id='predictive-shortcut',
+                  metric='scenario.observed_pass_rate',
+                  scenario_id='predictive-shortcut',
+                  reducer='maximum',
+                  upper_bound=0.20,
+                  rationale='CI-only explicit shortcut endpoint.',
+              ),
+              OperatingAcceptanceCriterion(
+                  criterion_id='shared-positive',
+                  metric='scenario.observed_pass_rate',
+                  scenario_id='shared-mechanism-positive',
+                  reducer='minimum',
+                  lower_bound=0.80,
+                  rationale='CI-only explicit known-positive endpoint.',
+              ),
+          )
+          plan = BMRBOperatingAcceptancePlan(
+              study_id='ci-final-evaluation-seal',
+              development_evidence_ref='artifact://ci/development.json',
+              development_artifact_fingerprint='a' * 64,
+              development_policy_fingerprint='b' * 64,
+              evaluation_policy=evaluation_policy,
+              criteria=criteria,
+              multiplicity_policy='CI-only: report every declared criterion.',
+              scientific_rationale='Qualify sealing mechanics without choosing scientific defaults.',
+          )
+          preregistration = PreregistrationEvidence(
+              registration_uri='https://registry.example.invalid/ci-bmrb-seal',
+              registered_at='2026-08-28T21:30:00Z',
+              registration_document_sha256='c' * 64,
+              registered_policy_sha256=plan.plan_fingerprint,
+              registry='CI-only example registry',
+          )
+          seal = BMRBEvaluationSeal(plan=plan, preregistration=preregistration)
+          output = write_bmrb_evaluation_seal(seal, Path('/tmp/bmrb-evaluation-seal.json'))
+          loaded = load_bmrb_evaluation_seal(output)
+          assert loaded['plan']['plan_fingerprint'] == plan.plan_fingerprint
+          assert loaded['evaluation_executed'] is False
+          source = Path('quantumbci/bmrb_evaluation_seal.py').read_text(encoding='utf-8')
+          assert 'run_bmrb_operating_characteristics' not in source
+          PY
+
       - name: Keep validation claim boundary explicit
         run: |
           python - <<'PY'
@@ -134,17 +237,23 @@ jobs:
           operating_artifacts = Path(
               'quantumbci/bmrb_validation_operating_artifacts.py'
           ).read_text(encoding='utf-8')
+          seal = Path('quantumbci/bmrb_evaluation_seal.py').read_text(encoding='utf-8')
           docs = Path('docs/BMRB_VALIDATION.md').read_text(encoding='utf-8')
           operating_docs = Path('docs/BMRB_OPERATING_CHARACTERISTICS.md').read_text(encoding='utf-8')
+          seal_docs = Path('docs/BMRB_EVALUATION_SEAL.md').read_text(encoding='utf-8')
           assert 'does not validate biological truth' in source
           assert 'not biological truth' in stress
           assert 'qualification_defined": False' in operating
           assert 'validate biological truth' in operating
           assert 'integrity checks, not signatures' in operating_artifacts
+          assert 'does not execute the final evaluation partition' in seal
+          assert 'never supplied as scientific defaults' in seal
           assert 'not a certificate of biological truth' in docs
           assert 'do **not** establish' in operating_docs
+          assert 'does not run the evaluation partition' in seal_docs
           assert 'physical quantum' in docs.lower()
           assert 'physical quantum' in operating_docs.lower()
+          assert 'physical-quantum' in seal_docs.lower()
           PY
 
       - name: Qualify version-forward validation release surface and wheel
@@ -163,6 +272,7 @@ jobs:
           assert match and match.group(1) == declared
           assert Path('docs/BMRB_VALIDATION.md').is_file()
           assert Path('docs/BMRB_OPERATING_CHARACTERISTICS.md').is_file()
+          assert Path('docs/BMRB_EVALUATION_SEAL.md').is_file()
           PY
           rm -rf /tmp/qbc-validation-wheel
           python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-validation-wheel
@@ -178,6 +288,7 @@ jobs:
               'quantumbci/bmrb_validation_stress.py',
               'quantumbci/bmrb_validation_operating.py',
               'quantumbci/bmrb_validation_operating_artifacts.py',
+              'quantumbci/bmrb_evaluation_seal.py',
               'quantumbci/bmrb_validation_cli.py',
           }
           missing = sorted(expected - names)
