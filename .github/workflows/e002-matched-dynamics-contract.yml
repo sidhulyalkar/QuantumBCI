@@ -219,6 +219,7 @@ jobs:
           matched = stages['fit_matched_baseline']
           controls = stages['fit_extended_classical_controls']
           probabilistic = stages['fit_probabilistic_state_space_control']
+          switching = stages['fit_switching_state_control']
           assert matched['depends_on'] == ['trajectory_contract']
           assert 'fit-matched-dynamics' in matched['command']
           assert matched['command'][-1] == '0'
@@ -237,10 +238,15 @@ jobs:
           assert probabilistic['command'][:3] == [
               'python', '-m', 'quantumbci.experiments.probabilistic_ssm_task'
           ]
+          assert switching['depends_on'] == ['fit_probabilistic_state_space_control']
+          assert switching['command'][:3] == [
+              'python', '-m', 'quantumbci.experiments.switching_state_task'
+          ]
           assert stages['interventions']['depends_on'] == [
               'fit_matched_baseline',
               'fit_extended_classical_controls',
               'fit_probabilistic_state_space_control',
+              'fit_switching_state_control',
           ]
           PY
           python -m pip wheel . --no-deps --wheel-dir /tmp/quantumbci-matched-wheel

@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/sidhulyalkar/QuantumBCI"
 url: "https://github.com/sidhulyalkar/QuantumBCI"
 license: MIT
-version: "0.11.0"
+version: "0.12.0"
 keywords:
   - neuroscience
   - EEG
@@ -28,5 +28,8 @@ keywords:
   - Kalman filtering
   - predictive likelihood
   - uncertainty calibration
+  - switching-state models
+  - hidden Markov models
+  - regime switching
   - temporal leakage
   - reproducible research
