@@ -268,7 +268,7 @@ def test_evidence_pack_rejects_fingerprint_valid_string_case_valid_flag() -> Non
     artifact = make_evidence_pack()
     artifact["candidate_cases"][2]["valid"] = "false"
     _refingerprint_pack(artifact)
-    with pytest.raises(TypeError, match="case\[2\]\.valid.*JSON boolean"):
+    with pytest.raises(TypeError, match=r"case\[2\]\.valid.*JSON boolean"):
         verify_evidence_pack_result(artifact)
 
 
@@ -276,7 +276,7 @@ def test_evidence_pack_rejects_fingerprint_valid_integer_report_passed() -> None
     artifact = make_evidence_pack()
     artifact["candidate_cases"][2]["report"]["passed"] = 1
     _refingerprint_pack(artifact)
-    with pytest.raises(TypeError, match="report\.passed.*JSON boolean"):
+    with pytest.raises(TypeError, match=r"report\.passed.*JSON boolean"):
         verify_evidence_pack_result(artifact)
 
 
@@ -291,5 +291,5 @@ def test_evidence_pack_rejects_fingerprint_valid_string_policy_flag() -> None:
 def test_evidence_pack_rejects_nonboolean_unbound_promotion_flag() -> None:
     artifact = make_evidence_pack()
     artifact["promotion"]["passed"] = "true"
-    with pytest.raises(TypeError, match="promotion\.passed.*JSON boolean"):
+    with pytest.raises(TypeError, match=r"promotion\.passed.*JSON boolean"):
         verify_evidence_pack_result(artifact)
