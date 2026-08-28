@@ -34,6 +34,7 @@ jobs:
             quantumbci/bmrb_validation.py \
             quantumbci/bmrb_validation_stress.py \
             quantumbci/bmrb_validation_operating.py \
+            quantumbci/bmrb_validation_operating_artifacts.py \
             quantumbci/bmrb_validation_cli.py \
             tests/test_bmrb_validation.py \
             tests/test_bmrb_validation_stress.py \
@@ -89,10 +90,15 @@ jobs:
       - name: Qualify frozen operating-characteristics surface
         run: |
           python - <<'PY'
+          from pathlib import Path
           from quantumbci.bmrb_validation_operating import (
               BMRBOperatingStudyPolicy,
               qualification_smoke_grid,
               run_bmrb_operating_characteristics,
+              write_bmrb_operating_characteristics,
+          )
+          from quantumbci.bmrb_validation_operating_artifacts import (
+              load_bmrb_operating_characteristics,
           )
 
           policy = BMRBOperatingStudyPolicy(
@@ -110,6 +116,12 @@ jobs:
           assert by_scenario['shared-mechanism-positive'].observed_pass_rate == 1.0
           assert by_scenario['calibration-reversal'].observed_pass_rate == 1.0
           assert result.scientific_payload()['qualification_defined'] is False
+          output = write_bmrb_operating_characteristics(
+              result,
+              Path('/tmp/bmrb-operating.json'),
+          )
+          loaded = load_bmrb_operating_characteristics(output)
+          assert loaded['artifact_fingerprint'] == result.artifact_fingerprint
           PY
 
       - name: Keep validation claim boundary explicit
@@ -119,12 +131,16 @@ jobs:
           source = Path('quantumbci/bmrb_validation.py').read_text(encoding='utf-8')
           stress = Path('quantumbci/bmrb_validation_stress.py').read_text(encoding='utf-8')
           operating = Path('quantumbci/bmrb_validation_operating.py').read_text(encoding='utf-8')
+          operating_artifacts = Path(
+              'quantumbci/bmrb_validation_operating_artifacts.py'
+          ).read_text(encoding='utf-8')
           docs = Path('docs/BMRB_VALIDATION.md').read_text(encoding='utf-8')
           operating_docs = Path('docs/BMRB_OPERATING_CHARACTERISTICS.md').read_text(encoding='utf-8')
           assert 'does not validate biological truth' in source
           assert 'not biological truth' in stress
           assert 'qualification_defined": False' in operating
           assert 'validate biological truth' in operating
+          assert 'integrity checks, not signatures' in operating_artifacts
           assert 'not a certificate of biological truth' in docs
           assert 'do **not** establish' in operating_docs
           assert 'physical quantum' in docs.lower()
@@ -161,6 +177,7 @@ jobs:
               'quantumbci/bmrb_validation.py',
               'quantumbci/bmrb_validation_stress.py',
               'quantumbci/bmrb_validation_operating.py',
+              'quantumbci/bmrb_validation_operating_artifacts.py',
               'quantumbci/bmrb_validation_cli.py',
           }
           missing = sorted(expected - names)
