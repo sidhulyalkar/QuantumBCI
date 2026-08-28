@@ -1,0 +1,9 @@
+# Default ownership. This becomes enforceable once CODEOWNERS review is required by a ruleset.
+* @sidhulyalkar
+
+# High-risk surfaces called out explicitly for future multi-maintainer ownership.
+/.github/workflows/ @sidhulyalkar
+/quantumbci/ @sidhulyalkar
+/tests/ @sidhulyalkar
+/pyproject.toml @sidhulyalkar
+/CITATION.cff @sidhulyalkar
