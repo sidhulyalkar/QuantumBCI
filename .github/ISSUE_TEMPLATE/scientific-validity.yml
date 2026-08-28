@@ -1,0 +1,72 @@
+name: Scientific-validity concern
+
+description: Report a concern about evidence authority, leakage, controls, inference, artifact integrity, or scientific interpretation.
+title: "[Scientific validity] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Negative scientific results and falsifiers are welcome. This form is for concerns that the implemented evidence contract or interpretation may be wrong, not merely that a favored mechanism failed.
+
+  - type: input
+    id: revision
+    attributes:
+      label: Affected version or commit
+      placeholder: "0.19.0 / abc123..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: concern
+    attributes:
+      label: Concern type
+      options:
+        - Mathematical equivalence or matched-control issue
+        - Fit/calibration/final-evaluation leakage
+        - Participant or inference-unit problem
+        - Artifact/fingerprint integrity problem
+        - Preregistration or policy-binding problem
+        - Promotion/gate monotonicity problem
+        - Statistical estimand or uncertainty problem
+        - Claim ceiling or interpretation problem
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: Expected scientific contract
+      description: State the evidence or interpretation rule you believe should hold.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence for the concern
+      description: Provide the smallest reproducible example, artifact mapping, equation, or code path that demonstrates the issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: consequence
+    attributes:
+      label: Potential consequence
+      description: Which result, evidence tier, promotion decision, or claim could change if this concern is correct?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_falsifier
+    attributes:
+      label: Suggested falsifier or regression test
+      description: What test would distinguish the current behavior from the corrected scientific behavior?
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Data check
+      options:
+        - label: This report contains no private participant data, credentials, or proprietary model artifacts.
+          required: true

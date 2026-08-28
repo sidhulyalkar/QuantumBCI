@@ -1,0 +1,80 @@
+name: Research proposal
+
+description: Propose a mechanism, adversary, validation study, dataset, or benchmark expansion.
+title: "[Research] "
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Scientific question
+      description: State the narrow neural signature or mechanism question this work would test.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: claim_class
+    attributes:
+      label: Strongest intended claim class
+      options:
+        - classical_control
+        - quantum_inspired
+        - quantum_algorithm
+        - physical_quantum
+    validations:
+      required: true
+
+  - type: textarea
+    id: falsifier
+    attributes:
+      label: Primary falsifier
+      description: What result should make us reject or sharply limit the proposed mechanism claim?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Strongest matched alternatives
+      description: List the classical, nonlinear, probabilistic, representation, nuisance, or recovery controls that deserve their best chance.
+    validations:
+      required: true
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Evidence authority
+      description: Define participants/cases, fit authority, calibration authority, immutable final evaluation, and any cross-representation pairing requirements.
+    validations:
+      required: true
+
+  - type: textarea
+    id: estimand
+    attributes:
+      label: Primary estimand and inference unit
+      description: State what is estimated and which independent unit supports uncertainty or replication claims.
+    validations:
+      required: true
+
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Reproducibility and artifact contract
+      description: Identify dataset/model/policy/source fingerprints and machine-readable outputs that should be bound.
+
+  - type: textarea
+    id: value
+    attributes:
+      label: Why this should be built now
+      description: Explain what distinct uncertainty this resolves compared with the active BMRB roadmap.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Claim discipline
+      options:
+        - label: A negative or classically explained result will be treated as a valid benchmark outcome.
+          required: true
+        - label: The proposal does not rely on model fit alone to support a physical-quantum claim.
+          required: true
