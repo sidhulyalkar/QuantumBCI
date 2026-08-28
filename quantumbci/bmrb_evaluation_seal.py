@@ -1,9 +1,9 @@
 """Preregisterable seals for frozen BMRB operating-characteristics evaluation.
 
 This module deliberately does not execute the final evaluation partition. It defines a
-machine-readable acceptance plan, binds that plan to development evidence and an exact
-evaluation policy, and then requires an external preregistration record whose registered
-policy hash matches the plan fingerprint.
+machine-readable acceptance plan, binds that plan to verified development evidence and
+an exact evaluation policy, and then requires an external preregistration record whose
+registered policy hash matches the plan fingerprint.
 
 Numeric acceptance thresholds are never supplied as scientific defaults by QuantumBCI.
 They must be explicitly justified and provided before the evaluation seed partition is
@@ -22,6 +22,9 @@ from .bmrb_validation_operating import (
     BMRBOperatingStudyPolicy,
     OperatingCurveGrid,
     SimulationSeedPartition,
+)
+from .bmrb_validation_operating_artifacts import (
+    verify_bmrb_operating_characteristics_mapping,
 )
 from .preregistration import PreregistrationEvidence, canonical_scientific_fingerprint
 
@@ -182,9 +185,9 @@ class OperatingAcceptanceCriterion:
 
 
 def _operating_policy_from_mapping(payload: Mapping[str, Any]) -> BMRBOperatingStudyPolicy:
-    grid_payload = _required_mapping("evaluation_policy.grid", payload.get("grid"))
+    grid_payload = _required_mapping("operating_policy.grid", payload.get("grid"))
     seed_payload = _required_mapping(
-        "evaluation_policy.seed_partition",
+        "operating_policy.seed_partition",
         payload.get("seed_partition"),
     )
     grid = OperatingCurveGrid(
@@ -206,8 +209,8 @@ def _operating_policy_from_mapping(payload: Mapping[str, Any]) -> BMRBOperatingS
         max_replicates_per_cell=int(seed_payload.get("max_replicates_per_cell", 0)),
     )
     policy = BMRBOperatingStudyPolicy(
-        study_id=_required_text("evaluation_policy.study_id", payload.get("study_id")),
-        source_sha=_required_text("evaluation_policy.source_sha", payload.get("source_sha")),
+        study_id=_required_text("operating_policy.study_id", payload.get("study_id")),
+        source_sha=_required_text("operating_policy.source_sha", payload.get("source_sha")),
         partition=str(payload.get("partition", "")),
         grid=grid,
         replicates_per_cell=int(payload.get("replicates_per_cell", 0)),
@@ -216,7 +219,7 @@ def _operating_policy_from_mapping(payload: Mapping[str, Any]) -> BMRBOperatingS
         seed_partition=seed_partition,
     )
     if policy.to_mapping() != dict(payload):
-        raise ValueError("evaluation operating policy is not canonical or has stale fingerprints")
+        raise ValueError("operating policy is not canonical or has stale fingerprints")
     return policy
 
 
@@ -228,6 +231,7 @@ class BMRBOperatingAcceptancePlan:
     development_evidence_ref: str
     development_artifact_fingerprint: str
     development_policy_fingerprint: str
+    development_seed_partition_fingerprint: str
     evaluation_policy: BMRBOperatingStudyPolicy
     criteria: tuple[OperatingAcceptanceCriterion, ...]
     multiplicity_policy: str
@@ -255,6 +259,14 @@ class BMRBOperatingAcceptancePlan:
         )
         object.__setattr__(
             self,
+            "development_seed_partition_fingerprint",
+            _sha256(
+                "development_seed_partition_fingerprint",
+                self.development_seed_partition_fingerprint,
+            ),
+        )
+        object.__setattr__(
+            self,
             "multiplicity_policy",
             _required_text("multiplicity_policy", self.multiplicity_policy),
         )
@@ -265,6 +277,13 @@ class BMRBOperatingAcceptancePlan:
         )
         if self.evaluation_policy.partition != "evaluation":
             raise ValueError("a final BMRB acceptance plan must bind partition='evaluation'")
+        if (
+            self.development_seed_partition_fingerprint
+            != self.evaluation_policy.seed_partition.fingerprint
+        ):
+            raise ValueError(
+                "development and evaluation plans must share one frozen seed-partition authority"
+            )
         if not self.criteria:
             raise ValueError("a final BMRB acceptance plan requires explicit acceptance criteria")
         criteria = tuple(sorted(self.criteria, key=lambda criterion: criterion.criterion_id))
@@ -319,6 +338,9 @@ class BMRBOperatingAcceptancePlan:
             "development_evidence_ref": self.development_evidence_ref,
             "development_artifact_fingerprint": self.development_artifact_fingerprint,
             "development_policy_fingerprint": self.development_policy_fingerprint,
+            "development_seed_partition_fingerprint": (
+                self.development_seed_partition_fingerprint
+            ),
             "evaluation_policy": self.evaluation_policy.to_mapping(),
             "criteria": [criterion.to_mapping() for criterion in self.criteria],
             "multiplicity_policy": self.multiplicity_policy,
@@ -335,6 +357,45 @@ class BMRBOperatingAcceptancePlan:
 
     def to_mapping(self) -> dict[str, Any]:
         return {**self.decision_payload(), "plan_fingerprint": self.plan_fingerprint}
+
+    @classmethod
+    def from_verified_development_artifact(
+        cls,
+        *,
+        study_id: str,
+        development_evidence_ref: str,
+        development_artifact: Mapping[str, Any],
+        evaluation_policy: BMRBOperatingStudyPolicy,
+        criteria: tuple[OperatingAcceptanceCriterion, ...],
+        multiplicity_policy: str,
+        scientific_rationale: str,
+    ) -> "BMRBOperatingAcceptancePlan":
+        """Build a plan from verified development evidence without running evaluation."""
+
+        verify_bmrb_operating_characteristics_mapping(development_artifact)
+        development_policy_payload = _required_mapping(
+            "development_artifact.policy",
+            development_artifact.get("policy"),
+        )
+        development_policy = _operating_policy_from_mapping(development_policy_payload)
+        if development_policy.partition != "development":
+            raise ValueError("development evidence must come from partition='development'")
+        return cls(
+            study_id=study_id,
+            development_evidence_ref=development_evidence_ref,
+            development_artifact_fingerprint=_sha256(
+                "development_artifact.artifact_fingerprint",
+                development_artifact.get("artifact_fingerprint"),
+            ),
+            development_policy_fingerprint=development_policy.policy_fingerprint,
+            development_seed_partition_fingerprint=(
+                development_policy.seed_partition.fingerprint
+            ),
+            evaluation_policy=evaluation_policy,
+            criteria=criteria,
+            multiplicity_policy=multiplicity_policy,
+            scientific_rationale=scientific_rationale,
+        )
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> "BMRBOperatingAcceptancePlan":
@@ -363,6 +424,10 @@ class BMRBOperatingAcceptancePlan:
             development_policy_fingerprint=_sha256(
                 "development_policy_fingerprint",
                 payload.get("development_policy_fingerprint"),
+            ),
+            development_seed_partition_fingerprint=_sha256(
+                "development_seed_partition_fingerprint",
+                payload.get("development_seed_partition_fingerprint"),
             ),
             evaluation_policy=evaluation_policy,
             criteria=tuple(

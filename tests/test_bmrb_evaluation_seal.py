@@ -18,6 +18,9 @@ from quantumbci.bmrb_evaluation_seal import (
 from quantumbci.bmrb_validation_operating import (
     BMRBOperatingStudyPolicy,
     OperatingCurveGrid,
+    SimulationSeedPartition,
+    qualification_smoke_grid,
+    run_bmrb_operating_characteristics,
 )
 from quantumbci.preregistration import (
     PreregistrationEvidence,
@@ -89,12 +92,14 @@ def _criteria() -> tuple[OperatingAcceptanceCriterion, ...]:
 
 
 def _plan() -> BMRBOperatingAcceptancePlan:
+    evaluation_policy = _evaluation_policy()
     return BMRBOperatingAcceptancePlan(
         study_id="ci-bmrb-evaluation-seal",
         development_evidence_ref="artifact://development/operating.json",
         development_artifact_fingerprint="a" * 64,
         development_policy_fingerprint="b" * 64,
-        evaluation_policy=_evaluation_policy(),
+        development_seed_partition_fingerprint=evaluation_policy.seed_partition.fingerprint,
+        evaluation_policy=evaluation_policy,
         criteria=_criteria(),
         multiplicity_policy=(
             "CI-only example policy: every declared criterion must be reported; no endpoint may "
@@ -143,13 +148,17 @@ def test_acceptance_criterion_requires_explicit_bound_and_rationale() -> None:
 
 
 def test_acceptance_plan_requires_evaluation_partition() -> None:
-    development_policy = replace(_evaluation_policy(), partition="development")
+    evaluation_policy = _evaluation_policy()
+    development_policy = replace(evaluation_policy, partition="development")
     with pytest.raises(ValueError, match="partition='evaluation'"):
         BMRBOperatingAcceptancePlan(
             study_id="bad-partition",
             development_evidence_ref="artifact://development/operating.json",
             development_artifact_fingerprint="a" * 64,
             development_policy_fingerprint="b" * 64,
+            development_seed_partition_fingerprint=(
+                evaluation_policy.seed_partition.fingerprint
+            ),
             evaluation_policy=development_policy,
             criteria=_criteria(),
             multiplicity_policy="Report every criterion.",
@@ -157,7 +166,24 @@ def test_acceptance_plan_requires_evaluation_partition() -> None:
         )
 
 
+def test_acceptance_plan_requires_shared_seed_partition_authority() -> None:
+    evaluation_policy = _evaluation_policy()
+    with pytest.raises(ValueError, match="share one frozen seed-partition authority"):
+        BMRBOperatingAcceptancePlan(
+            study_id="mismatched-seed-authority",
+            development_evidence_ref="artifact://development/operating.json",
+            development_artifact_fingerprint="a" * 64,
+            development_policy_fingerprint="b" * 64,
+            development_seed_partition_fingerprint="d" * 64,
+            evaluation_policy=evaluation_policy,
+            criteria=_criteria(),
+            multiplicity_policy="Report every criterion.",
+            scientific_rationale="Development and evaluation authority must remain linked.",
+        )
+
+
 def test_acceptance_plan_requires_core_null_and_positive_endpoints() -> None:
+    evaluation_policy = _evaluation_policy()
     criteria = tuple(
         criterion
         for criterion in _criteria()
@@ -169,10 +195,82 @@ def test_acceptance_plan_requires_core_null_and_positive_endpoints() -> None:
             development_evidence_ref="artifact://development/operating.json",
             development_artifact_fingerprint="a" * 64,
             development_policy_fingerprint="b" * 64,
-            evaluation_policy=_evaluation_policy(),
+            development_seed_partition_fingerprint=(
+                evaluation_policy.seed_partition.fingerprint
+            ),
+            evaluation_policy=evaluation_policy,
             criteria=criteria,
             multiplicity_policy="Report every criterion.",
             scientific_rationale="Core known-truth endpoints are mandatory.",
+        )
+
+
+def test_verified_development_factory_binds_real_operating_evidence() -> None:
+    development_policy = BMRBOperatingStudyPolicy(
+        study_id="ci-development-evidence",
+        source_sha="development-source",
+        partition="development",
+        grid=qualification_smoke_grid(),
+        replicates_per_cell=1,
+        bootstrap_resamples=100,
+    )
+    development_artifact = run_bmrb_operating_characteristics(
+        development_policy
+    ).to_mapping()
+    evaluation_policy = _evaluation_policy()
+
+    plan = BMRBOperatingAcceptancePlan.from_verified_development_artifact(
+        study_id="verified-development-plan",
+        development_evidence_ref="artifact://development/verified.json",
+        development_artifact=development_artifact,
+        evaluation_policy=evaluation_policy,
+        criteria=_criteria(),
+        multiplicity_policy="Report every declared endpoint.",
+        scientific_rationale="Bind the final plan to verified development evidence.",
+    )
+
+    assert plan.development_artifact_fingerprint == development_artifact[
+        "artifact_fingerprint"
+    ]
+    assert plan.development_policy_fingerprint == development_policy.policy_fingerprint
+    assert (
+        plan.development_seed_partition_fingerprint
+        == evaluation_policy.seed_partition.fingerprint
+    )
+
+    tampered = deepcopy(development_artifact)
+    tampered["cells"][0]["base_seed"] += 1
+    with pytest.raises(ValueError, match="artifact fingerprint mismatch"):
+        BMRBOperatingAcceptancePlan.from_verified_development_artifact(
+            study_id="tampered-development",
+            development_evidence_ref="artifact://development/tampered.json",
+            development_artifact=tampered,
+            evaluation_policy=evaluation_policy,
+            criteria=_criteria(),
+            multiplicity_policy="Report every endpoint.",
+            scientific_rationale="Tampered development evidence must fail closed.",
+        )
+
+    alternate_authority = SimulationSeedPartition(
+        development_offset=20_000_000,
+        evaluation_offset=2_000_000_000_000_000,
+        cell_stride=10_000_019,
+        replicate_stride=1009,
+        max_replicates_per_cell=5000,
+    )
+    mismatched_evaluation = replace(
+        evaluation_policy,
+        seed_partition=alternate_authority,
+    )
+    with pytest.raises(ValueError, match="share one frozen seed-partition authority"):
+        BMRBOperatingAcceptancePlan.from_verified_development_artifact(
+            study_id="mismatched-authority",
+            development_evidence_ref="artifact://development/verified.json",
+            development_artifact=development_artifact,
+            evaluation_policy=mismatched_evaluation,
+            criteria=_criteria(),
+            multiplicity_policy="Report every endpoint.",
+            scientific_rationale="Seed authority mismatch must fail closed.",
         )
 
 

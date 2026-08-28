@@ -4,7 +4,7 @@ The Stage B operating-characteristics layer separates development and evaluation
 
 ## Why a seal exists
 
-A development study is allowed to inform scientific design. A final evaluation is supposed to test that design. If thresholds, endpoints, scenario selection, or multiplicity rules are edited after final-evaluation results are visible, the evaluation no longer provides an honest independent check.
+A development study is allowed to inform scientific design. A final evaluation is supposed to test that design. If thresholds, endpoints, scenario selection, seed authority, or multiplicity rules are edited after final-evaluation results are visible, the evaluation no longer provides an honest independent check.
 
 QuantumBCI therefore separates two objects:
 
@@ -16,17 +16,18 @@ The seal is an integrity and provenance contract. It is **not** a result and it 
 ## Required sequence
 
 1. Run and verify the **development** operating-characteristics study.
-2. Preserve the development artifact and its policy fingerprint.
+2. Preserve the development artifact and its operating-policy fingerprint.
 3. Inspect development evidence and justify the final evaluation design scientifically.
-4. Construct an exact `BMRBOperatingStudyPolicy` with `partition="evaluation"`. Do not execute it.
+4. Construct an exact `BMRBOperatingStudyPolicy` with `partition="evaluation"` using the same frozen `SimulationSeedPartition` authority as the development study. Do not execute it.
 5. Declare explicit acceptance criteria, their numeric bounds, and a rationale for every bound.
 6. Declare the multiplicity/reporting policy. Endpoints may not be silently dropped after evaluation.
-7. Build `BMRBOperatingAcceptancePlan` and record `plan.plan_fingerprint`.
-8. Put the plan fingerprint and full scientific rationale in an external immutable/timestamped registration document.
-9. Construct `PreregistrationEvidence` whose `registered_policy_sha256` equals the plan fingerprint.
-10. Construct and archive `BMRBEvaluationSeal`.
-11. Independently verify the external registration timestamp/URI and the local seal.
-12. Only then may a separate future execution lane consume the sealed evaluation policy.
+7. Prefer `BMRBOperatingAcceptancePlan.from_verified_development_artifact(...)` so the development artifact is independently verified and its artifact, policy, and seed-authority fingerprints are extracted rather than retyped.
+8. Record `plan.plan_fingerprint`.
+9. Put the plan fingerprint and full scientific rationale in an external immutable/timestamped registration document.
+10. Construct `PreregistrationEvidence` whose `registered_policy_sha256` equals the plan fingerprint.
+11. Construct and archive `BMRBEvaluationSeal`.
+12. Independently verify the external registration timestamp/URI and the local seal.
+13. Only then may a separate future execution lane consume the sealed evaluation policy.
 
 The current seal module intentionally contains no `run_bmrb_operating_characteristics` call and no final-evaluation command.
 
@@ -46,19 +47,24 @@ The plan does require that a final BMRB validation address certain **structural 
 
 Those requirements prevent a final evaluation from quietly omitting the cases most relevant to the benchmark's falsification claims. They do not choose the acceptable numbers.
 
-## Development evidence binding
+## Development evidence and seed-authority binding
 
 The plan binds:
 
 - `development_evidence_ref`;
 - the development operating artifact fingerprint;
-- the development operating policy fingerprint;
+- the development operating-policy fingerprint;
+- the development seed-partition fingerprint;
 - the exact future evaluation policy, including its grid, source revision, replicate count, calibration budget, bootstrap resampling, and evaluation seed-partition authority;
 - all criteria and bounds;
 - multiplicity/reporting policy;
 - scientific rationale.
 
-Changing any of these changes the plan fingerprint and invalidates an existing preregistration binding.
+The development seed-partition fingerprint must equal the seed-partition fingerprint carried by the evaluation policy. This prevents a plan from claiming development/evaluation separation while silently switching to unrelated seed arithmetic that could overlap.
+
+`from_verified_development_artifact(...)` first applies the normal BMRB operating-artifact verifier. A stale or tampered development artifact therefore cannot be used to manufacture a sealed plan through the recommended path.
+
+Changing any bound, evidence fingerprint, seed authority, evaluation policy, endpoint, or rationale changes the plan fingerprint and invalidates an existing preregistration binding.
 
 ## External preregistration
 
@@ -80,6 +86,7 @@ The serialized seal is canonical and fingerprinted. Read-side verification rejec
 - stale or noncanonical nested evaluation-policy fingerprints;
 - post-hoc threshold changes;
 - a development policy disguised as final evaluation;
+- development and evaluation plans that do not share the same frozen seed-partition authority;
 - missing core null/positive endpoints;
 - criteria targeting scenarios outside the frozen grid;
 - an external preregistration hash that does not match the exact plan;

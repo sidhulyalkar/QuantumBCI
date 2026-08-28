@@ -206,6 +206,9 @@ jobs:
               development_evidence_ref='artifact://ci/development.json',
               development_artifact_fingerprint='a' * 64,
               development_policy_fingerprint='b' * 64,
+              development_seed_partition_fingerprint=(
+                  evaluation_policy.seed_partition.fingerprint
+              ),
               evaluation_policy=evaluation_policy,
               criteria=criteria,
               multiplicity_policy='CI-only: report every declared criterion.',
