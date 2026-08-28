@@ -1,0 +1,75 @@
+name: Software defect
+
+description: Report a reproducible software, packaging, CLI, or integration defect.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please minimize the reproduction and avoid attaching credentials, private neural data, participant identifiers, or proprietary checkpoints.
+
+  - type: input
+    id: revision
+    attributes:
+      label: QuantumBCI version or commit
+      description: Installed version and, when possible, the exact source SHA.
+      placeholder: "0.19.0 / abc123..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python, OS, dependency/integration versions, and relevant optional extras.
+      placeholder: "Python 3.11, Ubuntu, NumPy ..., neurOS ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Commands or smallest synthetic input that reproduces the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Numerical/scientific kernel
+        - Evidence/artifact validation
+        - CLI or workbench
+        - Packaging/install
+        - neurOS or neuros-mechint integration
+        - CI/release tooling
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Submission checks
+      options:
+        - label: I removed credentials, private participant data, and proprietary artifacts from this report.
+          required: true
+        - label: If this could expose a security vulnerability, I followed SECURITY.md instead of posting exploit details publicly.
+          required: true
