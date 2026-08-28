@@ -49,14 +49,14 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Checkout QuantumBCI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout exact merged neurOS authority
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: sidhulyalkar/neurOS-v1
           ref: ${{ env.NEUROS_SHA }}
           path: _deps/neuros-v1
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -139,7 +139,7 @@ jobs:
         run: |
           cat "$RUNNER_TEMP/quantumbci-kumar2024/report.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload evidence bundle and research object
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: E001-Kumar2024-${{ inputs.profile }}-${{ github.sha }}
           if-no-files-found: error
