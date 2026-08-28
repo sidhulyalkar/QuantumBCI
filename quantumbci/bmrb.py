@@ -16,6 +16,7 @@ from .recapitulation import (
     GateStatus,
     MechanismNecessityProfile,
     bmrb_dynamics_signature,
+    mechanism_profile_from_mapping,
 )
 from .reliability import (
     DEFAULT_RELIABILITY_BOOTSTRAP_RESAMPLES,
@@ -38,6 +39,7 @@ DEFAULT_E002_RELIABILITY_ESTIMATES = (
     "direct_minus_nonlinear_mean_nll",
     "direct_minus_nonlinear_one_step_rmse",
 )
+BMRB_DYNAMICS_ARTIFACT_SCHEMA = 2
 
 
 def _canonical_json(value: Any) -> str:
@@ -57,6 +59,20 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _source_fingerprint(source_identity: Mapping[str, Any]) -> str:
+    return sha256(
+        b"quantumbci.bmrb-dynamics.v1\0"
+        + _canonical_json(source_identity).encode("utf-8")
+    ).hexdigest()
+
+
+def _artifact_fingerprint(payload: Mapping[str, Any]) -> str:
+    return sha256(
+        b"quantumbci.bmrb-dynamics-artifact.v2\0"
+        + _canonical_json(payload).encode("utf-8")
+    ).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -83,14 +99,16 @@ class BMRBDynamicsBundle:
     case_specs: tuple[BMRBCaseSpec, ...]
     reliability: RepeatedCaseReliabilityBundle
     profile: MechanismNecessityProfile
+    source_identity: Mapping[str, Any]
     source_fingerprint: str
 
-    def to_mapping(self) -> dict[str, Any]:
+    def _artifact_core(self) -> dict[str, Any]:
         return {
-            "schema_version": 1,
+            "schema_version": BMRB_DYNAMICS_ARTIFACT_SCHEMA,
             "artifact_role": "bmrb_dynamics_bundle",
             "benchmark": "BMRB_DYNAMICS_V1",
             "study_id": self.study_id,
+            "source_identity": dict(self.source_identity),
             "source_fingerprint": self.source_fingerprint,
             "cases": [case.to_mapping() for case in self.case_specs],
             "reliability": self.reliability.to_mapping(),
@@ -98,14 +116,74 @@ class BMRBDynamicsBundle:
             "claim_ceiling": self.profile.claim_class.value,
         }
 
+    @property
+    def artifact_fingerprint(self) -> str:
+        return _artifact_fingerprint(self._artifact_core())
+
+    def to_mapping(self) -> dict[str, Any]:
+        core = self._artifact_core()
+        return {**core, "artifact_fingerprint": self.artifact_fingerprint}
+
+
+def verify_bmrb_dynamics_mapping(payload: Mapping[str, Any]) -> MechanismNecessityProfile:
+    """Verify a serialized v0.16+ BMRB-Dynamics artifact before scientific reuse.
+
+    v0.15 artifacts remain valid terminal reports, but they did not serialize the
+    complete source identity needed to independently recompute their source
+    fingerprint. A causal stage therefore requires regeneration with v0.16+.
+    """
+
+    if payload.get("artifact_role") != "bmrb_dynamics_bundle":
+        raise ValueError("upstream BMRB artifact has the wrong artifact_role")
+    if payload.get("benchmark") != "BMRB_DYNAMICS_V1":
+        raise ValueError("upstream BMRB artifact is not BMRB_DYNAMICS_V1")
+    if int(payload.get("schema_version", 0)) < BMRB_DYNAMICS_ARTIFACT_SCHEMA:
+        raise ValueError(
+            "upstream BMRB-Dynamics artifact predates the self-verifying v0.16 schema; "
+            "regenerate it with quantumbci-bmrb dynamics before causal promotion"
+        )
+    source_identity = payload.get("source_identity")
+    if not isinstance(source_identity, Mapping):
+        raise ValueError("upstream BMRB artifact is missing source_identity")
+    claimed_source = _required_text(
+        "upstream source_fingerprint", payload.get("source_fingerprint")
+    )
+    if _source_fingerprint(source_identity) != claimed_source:
+        raise ValueError("upstream BMRB source fingerprint mismatch")
+
+    core = {
+        key: value for key, value in payload.items() if key != "artifact_fingerprint"
+    }
+    claimed_artifact = _required_text(
+        "upstream artifact_fingerprint", payload.get("artifact_fingerprint")
+    )
+    if _artifact_fingerprint(core) != claimed_artifact:
+        raise ValueError("upstream BMRB artifact fingerprint mismatch")
+
+    study_id = _required_text("upstream study_id", payload.get("study_id"))
+    if source_identity.get("study_id") != study_id:
+        raise ValueError("upstream BMRB source_identity study_id mismatch")
+    cases = payload.get("cases")
+    if source_identity.get("cases") != cases:
+        raise ValueError("upstream BMRB source_identity cases mismatch")
+    reliability = payload.get("reliability")
+    if not isinstance(reliability, Mapping):
+        raise ValueError("upstream BMRB artifact is missing reliability")
+    if source_identity.get("reliability_source_fingerprint") != reliability.get(
+        "source_fingerprint"
+    ):
+        raise ValueError("upstream BMRB reliability fingerprint linkage mismatch")
+    profile_payload = payload.get("mechanism_profile")
+    if not isinstance(profile_payload, Mapping):
+        raise ValueError("upstream BMRB artifact is missing mechanism_profile")
+    profile = mechanism_profile_from_mapping(profile_payload)
+    if payload.get("claim_ceiling") != profile.claim_class.value:
+        raise ValueError("upstream BMRB claim_ceiling mismatch")
+    return profile
+
 
 def load_bmrb_case_manifest(path: str | Path) -> tuple[str, tuple[BMRBCaseSpec, ...], dict[str, Any]]:
-    """Load a local manifest of qualified case-level v0.14 artifacts.
-
-    Paths are resolved relative to the manifest file. The manifest is intentionally
-    small so it can be generated by neurOS or another evidence authority without a
-    QuantumBCI-specific database.
-    """
+    """Load a local manifest of qualified case-level v0.14 artifacts."""
 
     manifest_path = Path(path).expanduser().resolve()
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -323,15 +401,13 @@ def build_bmrb_dynamics_bundle(
         "n_resamples": int(n_resamples),
         "seed": int(seed),
     }
-    fingerprint = sha256(
-        b"quantumbci.bmrb-dynamics.v1\0"
-        + _canonical_json(source_identity).encode("utf-8")
-    ).hexdigest()
+    fingerprint = _source_fingerprint(source_identity)
     return BMRBDynamicsBundle(
         study_id=study_id,
         case_specs=case_specs,
         reliability=reliability,
         profile=profile,
+        source_identity=source_identity,
         source_fingerprint=fingerprint,
     )
 
@@ -403,7 +479,7 @@ code {{ font-family: ui-monospace, monospace; }}
 <table><thead><tr><th>Quantity</th><th>Participant-weighted mean</th><th>Sign consistency</th><th>Hierarchical bootstrap 95% interval</th><th>ICC(A,1)</th></tr></thead>
 <tbody>{''.join(reliability_rows)}</tbody></table>
 <p class="small">ICC is shown only for a complete balanced participant × occasion panel and measures reproducibility of individual differences, not population recurrence. Evidence coverage is not the same as promotion.</p>
-<p class="small"><code>source_fingerprint={escape(bundle.source_fingerprint)}</code></p>
+<p class="small"><code>source_fingerprint={escape(bundle.source_fingerprint)}</code><br><code>artifact_fingerprint={escape(bundle.artifact_fingerprint)}</code></p>
 </body>
 </html>
 """

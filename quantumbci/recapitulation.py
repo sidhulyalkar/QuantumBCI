@@ -33,6 +33,13 @@ class GateStatus(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
+def _required_text(name: str, value: Any) -> str:
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"{name} must not be empty")
+    return text
+
+
 @dataclass(frozen=True)
 class RecapitulationSignature:
     """A preregistrable neural computation/signature to be recapitulated."""
@@ -58,10 +65,11 @@ class RecapitulationSignature:
             "favorable_direction",
             "description",
         ):
-            if not str(getattr(self, name)).strip():
-                raise ValueError(f"RecapitulationSignature.{name} must not be empty")
+            _required_text(f"RecapitulationSignature.{name}", getattr(self, name))
         if not self.required_controls:
             raise ValueError("RecapitulationSignature.required_controls must not be empty")
+        if any(not str(item).strip() for item in self.required_controls):
+            raise ValueError("RecapitulationSignature.required_controls contains an empty control")
 
     def to_mapping(self) -> dict[str, Any]:
         return {
@@ -75,6 +83,29 @@ class RecapitulationSignature:
             "required_controls": list(self.required_controls),
             "description": self.description,
         }
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> "RecapitulationSignature":
+        controls = payload.get("required_controls")
+        if not isinstance(controls, (list, tuple)):
+            raise ValueError("signature.required_controls must be a list")
+        return cls(
+            id=_required_text("signature.id", payload.get("id")),
+            title=_required_text("signature.title", payload.get("title")),
+            domain=_required_text("signature.domain", payload.get("domain")),
+            target=_required_text("signature.target", payload.get("target")),
+            inference_unit=_required_text(
+                "signature.inference_unit", payload.get("inference_unit")
+            ),
+            primary_metric=_required_text(
+                "signature.primary_metric", payload.get("primary_metric")
+            ),
+            favorable_direction=_required_text(
+                "signature.favorable_direction", payload.get("favorable_direction")
+            ),
+            required_controls=tuple(str(item) for item in controls),
+            description=_required_text("signature.description", payload.get("description")),
+        )
 
 
 @dataclass(frozen=True)
@@ -91,10 +122,8 @@ class EvidenceGate:
     threshold: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.id.strip():
-            raise ValueError("EvidenceGate.id must not be empty")
-        if not self.summary.strip():
-            raise ValueError("EvidenceGate.summary must not be empty")
+        _required_text("EvidenceGate.id", self.id)
+        _required_text("EvidenceGate.summary", self.summary)
         if self.value is not None and self.status == GateStatus.NOT_RUN:
             raise ValueError("NOT_RUN evidence gates cannot carry a numeric value")
         if self.status == GateStatus.PASS and self.threshold is None:
@@ -115,6 +144,37 @@ class EvidenceGate:
             "value": self.value,
             "threshold": self.threshold,
         }
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> "EvidenceGate":
+        tier_value = payload.get("tier_index")
+        if tier_value is not None:
+            tier = EvidenceTier(int(tier_value))
+        else:
+            raw_tier = _required_text("gate.tier", payload.get("tier")).upper()
+            try:
+                tier = EvidenceTier[raw_tier]
+            except KeyError as exc:
+                raise ValueError(f"unknown BMRB evidence tier: {raw_tier!r}") from exc
+        try:
+            status = GateStatus(_required_text("gate.status", payload.get("status")))
+        except ValueError as exc:
+            raise ValueError(f"unknown BMRB gate status: {payload.get('status')!r}") from exc
+        value = payload.get("value")
+        return cls(
+            id=_required_text("gate.id", payload.get("id")),
+            tier=tier,
+            status=status,
+            summary=_required_text("gate.summary", payload.get("summary")),
+            evidence_ref=(
+                None if payload.get("evidence_ref") is None else str(payload.get("evidence_ref"))
+            ),
+            metric=None if payload.get("metric") is None else str(payload.get("metric")),
+            value=None if value is None else float(value),
+            threshold=(
+                None if payload.get("threshold") is None else str(payload.get("threshold"))
+            ),
+        )
 
 
 def validate_monotonic_promotion(gates: Iterable[EvidenceGate]) -> None:
@@ -142,8 +202,7 @@ class MechanismNecessityProfile:
     metadata: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        if not self.mechanism_id.strip():
-            raise ValueError("mechanism_id must not be empty")
+        _required_text("mechanism_id", self.mechanism_id)
         if not self.gates:
             raise ValueError("MechanismNecessityProfile.gates must not be empty")
         ids = [gate.id for gate in self.gates]
@@ -185,13 +244,6 @@ class MechanismNecessityProfile:
 
     @property
     def promotion_ceiling(self) -> EvidenceTier | None:
-        """Highest contiguous tier with an explicit PASS decision.
-
-        CHARACTERIZED evidence stops promotion because it intentionally has no universal
-        decision rule. FAIL also stops promotion. This makes evidence availability and
-        scientific promotion impossible to confuse in machine-readable reports.
-        """
-
         by_tier = {gate.tier: gate for gate in self.gates}
         ceiling: EvidenceTier | None = None
         for tier in EvidenceTier:
@@ -239,6 +291,51 @@ class MechanismNecessityProfile:
             ),
         }
 
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> "MechanismNecessityProfile":
+        role = payload.get("artifact_role")
+        if role is not None and role != "mechanism_necessity_profile":
+            raise ValueError(f"unexpected profile artifact_role: {role!r}")
+        signature = payload.get("signature")
+        gates = payload.get("gates")
+        metadata = payload.get("metadata", {})
+        if not isinstance(signature, Mapping):
+            raise ValueError("mechanism profile is missing signature mapping")
+        if not isinstance(gates, list) or not gates:
+            raise ValueError("mechanism profile is missing gates list")
+        if not isinstance(metadata, Mapping):
+            raise ValueError("mechanism profile metadata must be an object")
+        try:
+            claim_class = ClaimClass(_required_text("claim_class", payload.get("claim_class")))
+        except ValueError as exc:
+            raise ValueError(f"unknown QuantumBCI claim_class: {payload.get('claim_class')!r}") from exc
+        profile = cls(
+            mechanism_id=_required_text("mechanism_id", payload.get("mechanism_id")),
+            claim_class=claim_class,
+            signature=RecapitulationSignature.from_mapping(signature),
+            gates=tuple(
+                EvidenceGate.from_mapping(gate)
+                for gate in gates
+                if isinstance(gate, Mapping)
+            ),
+            metadata=dict(metadata),
+        )
+        if len(profile.gates) != len(gates):
+            raise ValueError("every mechanism profile gate must be an object")
+        # Derived fields are not authority, but when present they must agree with the
+        # reconstructed contract so stale or hand-edited reports fail closed.
+        expected = profile.to_mapping()
+        for key in (
+            "evidence_coverage_tier",
+            "promotion_ceiling",
+            "first_failing_gate",
+            "unresolved_gate",
+            "necessity_claim_permitted",
+        ):
+            if key in payload and payload.get(key) != expected.get(key):
+                raise ValueError(f"mechanism profile derived field mismatch: {key}")
+        return profile
+
 
 def bmrb_dynamics_signature() -> RecapitulationSignature:
     return RecapitulationSignature(
@@ -269,3 +366,9 @@ def bmrb_dynamics_signature() -> RecapitulationSignature:
 
 def gate_map(profile: MechanismNecessityProfile) -> dict[str, EvidenceGate]:
     return {gate.id: gate for gate in profile.gates}
+
+
+def mechanism_profile_from_mapping(payload: Mapping[str, Any]) -> MechanismNecessityProfile:
+    """Strict convenience parser for serialized BMRB mechanism profiles."""
+
+    return MechanismNecessityProfile.from_mapping(payload)
