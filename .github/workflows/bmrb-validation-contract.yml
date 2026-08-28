@@ -28,6 +28,7 @@ jobs:
             tests/test_bmrb_validation_stress.py \
             tests/test_bmrb_validation_dependence.py \
             tests/test_bmrb_validation_operating.py \
+            tests/test_bmrb_validation_diagnostics.py \
             tests/test_bmrb_evaluation_seal.py
 
       - name: Static-check validation surfaces
@@ -38,12 +39,14 @@ jobs:
             quantumbci/bmrb_validation_dependence.py \
             quantumbci/bmrb_validation_operating.py \
             quantumbci/bmrb_validation_operating_artifacts.py \
+            quantumbci/bmrb_validation_diagnostics.py \
             quantumbci/bmrb_evaluation_seal.py \
             quantumbci/bmrb_validation_cli.py \
             tests/test_bmrb_validation.py \
             tests/test_bmrb_validation_stress.py \
             tests/test_bmrb_validation_dependence.py \
             tests/test_bmrb_validation_operating.py \
+            tests/test_bmrb_validation_diagnostics.py \
             tests/test_bmrb_evaluation_seal.py
 
       - name: Qualify installed validation CLI
@@ -155,6 +158,55 @@ jobs:
               Path('/tmp/bmrb-operating.json'),
           )
           loaded = load_bmrb_operating_characteristics(output)
+          assert loaded['artifact_fingerprint'] == result.artifact_fingerprint
+          PY
+
+      - name: Qualify gate-level operating diagnostics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from quantumbci.bmrb_validation_diagnostics import (
+              load_bmrb_gate_diagnostics,
+              run_bmrb_gate_diagnostics,
+              write_bmrb_gate_diagnostics,
+          )
+          from quantumbci.bmrb_validation_operating import (
+              BMRBOperatingStudyPolicy,
+              OperatingCurveGrid,
+          )
+
+          policy = BMRBOperatingStudyPolicy(
+              study_id='ci-gate-diagnostics',
+              source_sha='github-actions',
+              partition='development',
+              grid=OperatingCurveGrid(
+                  scenario_ids=(
+                      'effect-null',
+                      'equivalence-null',
+                      'predictive-shortcut',
+                      'shared-mechanism-positive',
+                  ),
+                  participant_counts=(8,),
+                  effect_scales=(1.0,),
+                  heterogeneity_scales=(1.0,),
+                  measurement_noise_scales=(1.0,),
+              ),
+              replicates_per_cell=2,
+              bootstrap_resamples=100,
+          )
+          result = run_bmrb_gate_diagnostics(policy)
+          payload = result.to_mapping()
+          cells = {cell['scenario_id']: cell for cell in payload['cells']}
+          assert cells['effect-null']['first_failing_gate_counts']['effect'] == 2
+          assert cells['equivalence-null']['first_failing_gate_counts']['adversary'] == 2
+          assert cells['predictive-shortcut']['first_failing_gate_counts']['conservation'] == 2
+          assert cells['shared-mechanism-positive']['first_failing_gate_counts']['none'] == 2
+          coverage = payload['aggregate']['gate_confusion']['coverage']
+          assert coverage['expected_failure_support'] == 0
+          assert coverage['failure_specificity'] is None
+          assert payload['aggregate']['software_invalid_trials_in_gate_confusion'] == 0
+          output = write_bmrb_gate_diagnostics(result, Path('/tmp/bmrb-gate-diagnostics.json'))
+          loaded = load_bmrb_gate_diagnostics(output)
           assert loaded['artifact_fingerprint'] == result.artifact_fingerprint
           PY
 
@@ -272,10 +324,12 @@ jobs:
           operating_artifacts = Path(
               'quantumbci/bmrb_validation_operating_artifacts.py'
           ).read_text(encoding='utf-8')
+          diagnostics = Path('quantumbci/bmrb_validation_diagnostics.py').read_text(encoding='utf-8')
           seal = Path('quantumbci/bmrb_evaluation_seal.py').read_text(encoding='utf-8')
           docs = Path('docs/BMRB_VALIDATION.md').read_text(encoding='utf-8')
           dependence_docs = Path('docs/BMRB_DEPENDENCE_STRESS.md').read_text(encoding='utf-8')
           operating_docs = Path('docs/BMRB_OPERATING_CHARACTERISTICS.md').read_text(encoding='utf-8')
+          diagnostic_docs = Path('docs/BMRB_GATE_DIAGNOSTICS.md').read_text(encoding='utf-8')
           seal_docs = Path('docs/BMRB_EVALUATION_SEAL.md').read_text(encoding='utf-8')
           assert 'does not validate biological truth' in source
           assert 'not biological truth' in stress
@@ -284,15 +338,18 @@ jobs:
           assert 'qualification_defined": False' in operating
           assert 'validate biological truth' in operating
           assert 'integrity checks, not signatures' in operating_artifacts
+          assert 'software-invalid' in diagnostics
           assert 'does not execute the final evaluation partition' in seal
           assert 'never supplied as scientific defaults' in seal
           assert 'not a certificate of biological truth' in docs
           assert 'does **not** validate biological realism' in dependence_docs
           assert 'do **not** establish' in operating_docs
+          assert 'Missing truth support is not evidence of perfect performance' in diagnostic_docs
           assert 'does not run the evaluation partition' in seal_docs
           assert 'physical quantum' in docs.lower()
           assert 'physical-quantum' in dependence_docs.lower()
           assert 'physical quantum' in operating_docs.lower()
+          assert 'physical-quantum' in diagnostic_docs.lower()
           assert 'physical-quantum' in seal_docs.lower()
           PY
 
@@ -313,6 +370,7 @@ jobs:
           assert Path('docs/BMRB_VALIDATION.md').is_file()
           assert Path('docs/BMRB_DEPENDENCE_STRESS.md').is_file()
           assert Path('docs/BMRB_OPERATING_CHARACTERISTICS.md').is_file()
+          assert Path('docs/BMRB_GATE_DIAGNOSTICS.md').is_file()
           assert Path('docs/BMRB_EVALUATION_SEAL.md').is_file()
           PY
           rm -rf /tmp/qbc-validation-wheel
@@ -330,6 +388,7 @@ jobs:
               'quantumbci/bmrb_validation_dependence.py',
               'quantumbci/bmrb_validation_operating.py',
               'quantumbci/bmrb_validation_operating_artifacts.py',
+              'quantumbci/bmrb_validation_diagnostics.py',
               'quantumbci/bmrb_evaluation_seal.py',
               'quantumbci/bmrb_validation_cli.py',
           }
