@@ -118,7 +118,9 @@ def test_recommended_development_grid_is_substantive_but_predeclared() -> None:
     assert grid.effect_scales == (0.5, 0.75, 1.0, 1.25)
     assert grid.heterogeneity_scales == (0.5, 1.0, 2.0)
     assert grid.measurement_noise_scales == (0.5, 1.0, 2.0)
-    assert grid.cell_count == 864
+    assert "coverage-family-deficit" in grid.scenario_ids
+    assert len(grid.scenario_ids) == 7
+    assert grid.cell_count == 1008
 
 
 def test_smoke_operating_study_recovers_declared_nulls_and_positives() -> None:
