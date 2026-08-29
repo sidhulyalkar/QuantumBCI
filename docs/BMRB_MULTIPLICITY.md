@@ -148,4 +148,4 @@ This development branch does **not** mutate the sealed final-evaluation partitio
 
 ## Claim boundary
 
-Multiplicity authority controls reporting and promotion semantics under a declared candidate family. The synthetic stress estimates behavior under declared known-null candidate searches. Neither validates biological truth, establishes neural causal necessity, or authorizes a physical-quantum interpretation.
+This multiplicity layer does not validate biological truth. It controls reporting and promotion semantics under a declared candidate family, while the synthetic stress estimates behavior under declared known-null candidate searches. It does not establish neural causal necessity or authorize a physical-quantum interpretation.
