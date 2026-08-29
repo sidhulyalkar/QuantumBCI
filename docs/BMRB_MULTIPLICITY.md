@@ -14,19 +14,21 @@ The first multiplicity problem is more basic and easier to falsify:
 
 > Was the complete candidate family declared before final evidence was inspected, and can a non-primary survivor acquire promotion authority after the fact?
 
-v1 answers that with grouping, ordering, roles, closed-world result matching, a content fingerprint, and a development-only winner-picking stress.
+v1 answers that with one closed family, frozen ordering and roles, exact result matching, a content fingerprint, and a development-only winner-picking stress.
 
-## Candidate roles
+## One closed family in v1
 
-Every candidate belongs to one declared family and has one role:
+v1 deliberately permits **exactly one candidate family**. This prevents an easy taxonomic escape hatch where 20 searched candidates could be relabelled as 20 one-candidate families, each with its own apparent primary.
 
-- `primary`: the single promotion-authoritative candidate for that family in v1;
+Every candidate in the family has one role:
+
+- `primary`: the single promotion-authoritative candidate in v1;
 - `secondary`: retained and reported as confirmatory/characterization evidence, but not promotion-authoritative under the v1 primary-only rule;
 - `exploratory`: hypothesis-generating evidence that cannot be promoted post hoc.
 
-Each family must contain exactly one primary candidate, and that candidate must occupy order zero. Candidate order is contiguous and frozen.
+The family contains exactly one primary candidate, and that candidate must occupy order zero. Candidate order is contiguous and frozen.
 
-This is intentionally conservative. A future procedure that permits several primary hypotheses, alpha transfer, Holm correction, hierarchical FDR, or another multiplicity strategy should receive a new explicit method ID and its own operating-characteristic validation rather than silently broadening v1.
+This is intentionally conservative. A future procedure that permits several candidate families, several primary hypotheses, alpha transfer, Holm correction, hierarchical FDR, or another multiplicity strategy must receive a new explicit method ID and its own operating-characteristic validation rather than silently broadening v1.
 
 ## Closed-world results
 
@@ -36,6 +38,7 @@ That means:
 
 - a failed candidate cannot disappear from the family after evaluation;
 - a new candidate cannot be added because it looks promising;
+- a candidate cannot be moved to another family to acquire a fresh primary slot;
 - renaming/reordering roles changes the plan fingerprint;
 - removing a candidate changes the plan fingerprint;
 - a scientific PASS from a secondary/exploratory candidate is visible but does not become a promoted result.
@@ -122,15 +125,16 @@ The exploratory PASS is not erased. It is simply not relabelled as the preregist
 
 ## What this does not solve yet
 
-v1 does not claim that one-primary-per-family is the optimal policy for every study. It does not yet provide:
+v1 does not claim that single-family primary-only authority is optimal for every study. It does not yet provide:
 
 - corrected multi-primary testing;
+- multiple-family or hierarchical promotion authority;
 - alpha allocation or transfer;
 - hierarchical familywise-error control;
 - false-discovery-rate procedures;
 - correlated candidate-search operating curves;
 - study/dataset-level hierarchical replication;
-- multiplicity across adaptive model/layer selection unless those choices are represented as candidates in the frozen family.
+- multiplicity across adaptive model/layer selection unless those choices are represented as candidates in the one frozen family.
 
 Those should be added as explicit methods and attacked with known-truth simulations before they receive promotion authority.
 
@@ -140,12 +144,12 @@ The existing operating-evaluation seal currently contains a human-readable `mult
 
 This development branch does **not** mutate the sealed final-evaluation partition or execute its seeds. The safe sequence is:
 
-1. qualify candidate-family authority and winner-picking stress on development evidence;
-2. extend the stress to correlated candidate families and adaptive layer/task searches;
-3. define any corrected multi-primary method explicitly;
+1. qualify single-family candidate authority and winner-picking stress on development evidence;
+2. extend the stress to correlated candidates and adaptive layer/task searches inside one declared family;
+3. design and validate an explicit multi-family or corrected multi-primary method if scientifically needed;
 4. version and bind the chosen multiplicity authority into a future preregistered evaluation-seal schema;
 5. only then consider opening the final evaluation partition.
 
 ## Claim boundary
 
-This multiplicity layer does not validate biological truth. It controls reporting and promotion semantics under a declared candidate family, while the synthetic stress estimates behavior under declared known-null candidate searches. It does not establish neural causal necessity or authorize a physical-quantum interpretation.
+This multiplicity layer does not validate biological truth. It controls reporting and promotion semantics under one declared candidate family, while the synthetic stress estimates behavior under declared known-null candidate searches. It does not establish neural causal necessity or authorize a physical-quantum interpretation.
