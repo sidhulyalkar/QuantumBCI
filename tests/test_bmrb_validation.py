@@ -29,6 +29,7 @@ def test_known_truth_suite_qualifies_and_localizes_failures() -> None:
     assert summaries["shared-mechanism-positive"]["observed_pass_rate"] == pytest.approx(1.0)
     assert summaries["predictive-shortcut"]["observed_pass_rate"] == pytest.approx(0.0)
     assert summaries["representation-specific"]["observed_pass_rate"] == pytest.approx(0.0)
+    assert summaries["coverage-family-deficit"]["observed_pass_rate"] == pytest.approx(0.0)
     assert summaries["calibration-reversal"]["observed_pass_rate"] == pytest.approx(1.0)
     assert all(
         item["expected_failure_localization_rate"] == pytest.approx(1.0)
@@ -53,6 +54,31 @@ def test_each_adversary_hits_its_declared_component() -> None:
             assert row.adversary_survival_passed is False
         elif scenario.expected_failure_component == "conservation":
             assert row.conservation_criteria_passed is False
+        elif scenario.expected_failure_component == "coverage":
+            assert row.effect_criteria_passed is True
+            assert row.adversary_survival_passed is True
+            assert row.conservation_criteria_passed is True
+            assert row.coverage_criteria_passed is False
+
+
+def test_coverage_negative_is_valid_evidence_with_a_stricter_family_requirement() -> None:
+    scenario = next(
+        item for item in default_validation_scenarios() if item.scenario_id == "coverage-family-deficit"
+    )
+    assert scenario.min_representation_families == 3
+
+    row = run_validation_replicate(
+        scenario,
+        replicate=0,
+        seed=6201,
+        participants=8,
+        bootstrap_resamples=100,
+    )
+    assert row.effect_criteria_passed is True
+    assert row.adversary_survival_passed is True
+    assert row.conservation_criteria_passed is True
+    assert row.coverage_criteria_passed is False
+    assert row.expected_failure_localized is True
 
 
 def test_missing_representation_pair_is_rejected() -> None:
@@ -64,6 +90,22 @@ def test_validation_policy_is_not_confirmatory_biological_authority() -> None:
     assert policy.confirmatory_authority is False
     assert policy.preregistration is None
     assert "Synthetic software-validation" in policy.sample_size_rationale
+
+
+def test_validation_policy_can_predeclare_stricter_family_coverage() -> None:
+    policy = validation_policy(
+        participants=8,
+        min_representation_families=3,
+        bootstrap_resamples=100,
+    )
+    assert policy.min_representation_families == 3
+
+    with pytest.raises(ValueError, match="positive integer"):
+        validation_policy(
+            participants=8,
+            min_representation_families=0,
+            bootstrap_resamples=100,
+        )
 
 
 def test_validation_requires_multiple_independent_participants() -> None:

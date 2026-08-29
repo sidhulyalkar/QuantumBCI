@@ -39,6 +39,7 @@ class BMRBValidationScenario:
     reference_ablation: float
     alternate_ablation: float
     information_novel: bool
+    min_representation_families: int = 2
     participant_effect_sd: float = 0.015
     measurement_sd: float = 0.005
     secondary_budget_effect: float | None = None
@@ -55,6 +56,10 @@ class BMRBValidationScenario:
             "coverage",
         }:
             raise ValueError("unknown expected_failure_component")
+        minimum_families = int(self.min_representation_families)
+        if minimum_families < 1 or minimum_families != self.min_representation_families:
+            raise ValueError("min_representation_families must be a positive integer")
+        object.__setattr__(self, "min_representation_families", minimum_families)
         for name in (
             "reference_effect",
             "alternate_effect",
@@ -137,8 +142,8 @@ def default_validation_scenarios() -> tuple[BMRBValidationScenario, ...]:
 
     The scenarios isolate distinct questions rather than collapsing them into one score:
     effect-null rejection, mathematical-equivalence rejection, true shared-mechanism
-    recovery, shortcut rejection, representation-specific failure, and calibration-budget
-    reversal.
+    recovery, shortcut rejection, representation-specific failure, coverage failure, and
+    calibration-budget reversal.
     """
 
     return (
@@ -198,6 +203,18 @@ def default_validation_scenarios() -> tuple[BMRBValidationScenario, ...]:
             information_novel=True,
         ),
         BMRBValidationScenario(
+            scenario_id="coverage-family-deficit",
+            truth_class="adversarial",
+            expected_scientific_pass=False,
+            expected_failure_component="coverage",
+            reference_effect=0.12,
+            alternate_effect=0.115,
+            reference_ablation=0.10,
+            alternate_ablation=0.095,
+            information_novel=True,
+            min_representation_families=3,
+        ),
+        BMRBValidationScenario(
             scenario_id="calibration-reversal",
             truth_class="known_positive",
             expected_scientific_pass=True,
@@ -217,6 +234,7 @@ def validation_policy(
     *,
     participants: int = 8,
     primary_calibration_per_class: int = 10,
+    min_representation_families: int = 2,
     inference_seed: int = 1901,
     bootstrap_resamples: int = 300,
 ) -> ConfirmatoryRepresentationPolicy:
@@ -228,6 +246,9 @@ def validation_policy(
 
     if participants < 4:
         raise ValueError("validation requires at least four participants")
+    minimum_families = int(min_representation_families)
+    if minimum_families < 1 or minimum_families != min_representation_families:
+        raise ValueError("min_representation_families must be a positive integer")
     return ConfirmatoryRepresentationPolicy(
         policy_id="bmrb-known-truth-validation-v1",
         reference_representation_id="raw",
@@ -235,7 +256,7 @@ def validation_policy(
         primary_classical_control="matched_control",
         min_participants=participants,
         min_representations=2,
-        min_representation_families=2,
+        min_representation_families=minimum_families,
         min_candidate_advantage=0.05,
         min_ablation_necessity=0.05,
         min_reference_positive_fraction=0.75,
@@ -348,6 +369,7 @@ def run_validation_replicate(
     policy = validation_policy(
         participants=participants,
         primary_calibration_per_class=primary_calibration_per_class,
+        min_representation_families=scenario.min_representation_families,
         inference_seed=int(seed) + int(replicate) * 17,
         bootstrap_resamples=bootstrap_resamples,
     )

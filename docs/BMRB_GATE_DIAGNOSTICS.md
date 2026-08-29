@@ -55,16 +55,24 @@ Across the complete frozen grid, each gate reports:
 - false-pass rate;
 - false-fail rate.
 
-A rate is `null` when its truth class has no support. This matters today for `coverage`: the
-current default DGM family contains coverage-positive cases but no dedicated coverage-negative
-scenario. Therefore coverage pass sensitivity can be estimated, while coverage specificity and
-false-pass rate must remain unestimated.
+A rate remains `null` whenever its truth class has no support.
 
 **Missing truth support is not evidence of perfect performance.**
 
-A future coverage-negative DGM should deliberately violate the declared participant,
-representation, or representation-family coverage requirement while preserving valid pairing
-and the other scientific gates as far as possible.
+The default DGM registry now supplies both truth classes for all four gates. In particular,
+`coverage-family-deficit` is a validly paired coverage-negative condition. It supplies two
+representation families with strong effect, novelty, and conservation evidence while the
+predeclared policy requires three families. The intended decision path is therefore:
+
+```text
+effect        PASS
+adversary     PASS
+conservation  PASS
+coverage      FAIL
+```
+
+This makes coverage failure specificity and false-pass rate empirically estimable without
+counting malformed or incomplete evidence as a scientific rejection.
 
 ## Decision-path decompositions
 
@@ -100,6 +108,9 @@ software_invalid_trials_in_gate_confusion = 0
 and states the exclusion policy explicitly. An invalid evidence bundle must not inflate gate
 specificity by being counted as a correctly rejected scientific null.
 
+The coverage-family deficit is deliberately on the other side of this boundary: the evidence is
+valid and exactly paired, but the scientific study fails a predeclared coverage requirement.
+
 ## Artifact integrity
 
 Gate diagnostics have their own schema and fingerprint rather than extending the stable v1
@@ -121,17 +132,18 @@ matter for confirmatory use.
 ## Relationship to Stage B
 
 This diagnostic layer should be run on the **development** operating authority before final
-acceptance criteria are frozen. It is intended to guide the next DGM expansion over:
+acceptance criteria are frozen. The recommended development grid now contains seven registered
+core DGMs and 1008 cells before Monte Carlo replication, adding explicit coverage-negative truth
+support without changing the frozen evaluation seed authority.
 
-- responder fraction;
-- session-count imbalance severity;
-- participant count;
-- measurement noise;
-- heterogeneity;
+The next development attacks should focus on dimensions not already isolated by the four gate
+truth classes:
+
 - near-boundary effects;
-- informative or structured missingness;
-- dedicated coverage-negative conditions;
-- stronger reduced comparators.
+- stronger reduced comparators under matched information sets;
+- multiplicity across mechanisms, layers, tasks, and metrics;
+- study/dataset-level hierarchical replication;
+- causal/interventional known-truth DGMs.
 
 Only after those development diagnostics are understood should final numeric acceptance bounds
 be justified, externally preregistered, and bound to the already-separated evaluation seed
