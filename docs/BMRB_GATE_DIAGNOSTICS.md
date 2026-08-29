@@ -55,8 +55,9 @@ Across the complete frozen grid, each gate reports:
 - false-pass rate;
 - false-fail rate.
 
-A rate remains `null` whenever its truth class has no support. **Missing truth support is not
-evidence of perfect performance.**
+A rate remains `null` whenever its truth class has no support.
+
+**Missing truth support is not evidence of perfect performance.**
 
 The default DGM registry now supplies both truth classes for all four gates. In particular,
 `coverage-family-deficit` is a validly paired coverage-negative condition. It supplies two
