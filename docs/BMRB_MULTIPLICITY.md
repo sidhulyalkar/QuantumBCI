@@ -2,7 +2,7 @@
 
 BMRB already separates effect, classical-adversary survival, conservation, and coverage. That is not enough if a researcher can run many candidate mechanisms, layers, tasks, or metrics and then promote whichever survivor looks best.
 
-`quantumbci.bmrb_multiplicity` closes that loophole before adding any new p-value gate.
+`quantumbci.bmrb_multiplicity` closes that loophole before adding any new p-value gate. `quantumbci.bmrb_multiplicity_stress` then attacks the authority with near-boundary known-null candidates passed through the production BMRB evaluator.
 
 ## Why v1 starts with authority rather than a correction formula
 
@@ -14,7 +14,7 @@ The first multiplicity problem is more basic and easier to falsify:
 
 > Was the complete candidate family declared before final evidence was inspected, and can a non-primary survivor acquire promotion authority after the fact?
 
-v1 answers that with grouping, ordering, roles, closed-world result matching, and a content fingerprint.
+v1 answers that with grouping, ordering, roles, closed-world result matching, a content fingerprint, and a development-only winner-picking stress.
 
 ## Candidate roles
 
@@ -48,6 +48,32 @@ authorized_any_promotion
 ```
 
 so a winner-picking trap can be visible rather than hidden inside a final headline.
+
+## Known-truth candidate-search stress
+
+`BMRB_CANDIDATE_SEARCH_MULTIPLICITY_STRESS_V1` uses the production `run_validation_replicate(...)` path rather than inventing a toy pass/fail simulator.
+
+Every searched candidate is generated from the same declared near-boundary null DGM:
+
+```text
+BMRB effect threshold:       0.050
+true reference effect:       0.049
+true alternate-lane effect:  0.049
+```
+
+The mean effect is therefore on the null side of the frozen software-validation boundary. Moderate participant heterogeneity means an individual candidate can occasionally survive all gates by chance.
+
+For each simulated search family the stress records:
+
+- how many candidates scientifically passed;
+- whether the predeclared primary passed;
+- whether a naive `any survivor` search would report success;
+- whether the multiplicity authority permits a promotion;
+- how many non-primary survivors were retained but suppressed from promotion.
+
+The crucial invariance test expands the same search from 2 to 20 candidates while preserving the primary candidate's exact simulation seed. Searching more candidates may increase the naive survivor count, but it **cannot change the primary candidate result or transfer promotion authority**.
+
+The stress is development simulation authority only. It is not connected to the frozen final-evaluation seed partition.
 
 ## Example
 
@@ -102,7 +128,7 @@ v1 does not claim that one-primary-per-family is the optimal policy for every st
 - alpha allocation or transfer;
 - hierarchical familywise-error control;
 - false-discovery-rate procedures;
-- multiplicity operating curves under correlated candidate searches;
+- correlated candidate-search operating curves;
 - study/dataset-level hierarchical replication;
 - multiplicity across adaptive model/layer selection unless those choices are represented as candidates in the frozen family.
 
@@ -114,12 +140,12 @@ The existing operating-evaluation seal currently contains a human-readable `mult
 
 This development branch does **not** mutate the sealed final-evaluation partition or execute its seeds. The safe sequence is:
 
-1. qualify candidate-family authority on development evidence;
-2. add operating stress for many searched candidates, including correlated families;
+1. qualify candidate-family authority and winner-picking stress on development evidence;
+2. extend the stress to correlated candidate families and adaptive layer/task searches;
 3. define any corrected multi-primary method explicitly;
 4. version and bind the chosen multiplicity authority into a future preregistered evaluation-seal schema;
 5. only then consider opening the final evaluation partition.
 
 ## Claim boundary
 
-Multiplicity authority controls reporting and promotion semantics under a declared candidate family. It does not validate biological truth, establish neural causal necessity, or authorize a physical-quantum interpretation.
+Multiplicity authority controls reporting and promotion semantics under a declared candidate family. The synthetic stress estimates behavior under declared known-null candidate searches. Neither validates biological truth, establishes neural causal necessity, or authorizes a physical-quantum interpretation.
