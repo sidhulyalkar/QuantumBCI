@@ -27,6 +27,7 @@ Measure whether BMRB:
 - recovers a shared non-equivalent mechanism;
 - rejects a predictive shortcut that has no ablation dependence;
 - rejects a representation-specific signature that does not conserve;
+- rejects scientifically insufficient representation-family coverage without misclassifying valid evidence as software-invalid;
 - keeps a predeclared primary calibration budget separate from a reversed secondary budget;
 - conserves a declared mechanism across an invertible coordinate change;
 - remains well behaved under participant heterogeneity;
@@ -35,7 +36,7 @@ Measure whether BMRB:
 
 ### Core data-generating mechanisms
 
-The compact qualification grid contains six stochastic scenarios plus one structural corruption test.
+The compact qualification grid contains seven stochastic scenarios plus one structural corruption test.
 
 | Scenario | Known truth | Intended decision |
 | --- | --- | --- |
@@ -44,8 +45,11 @@ The compact qualification grid contains six stochastic scenarios plus one struct
 | `shared-mechanism-positive` | positive effect and ablation dependence conserve across representations | pass scientific criteria |
 | `predictive-shortcut` | predictive effect exists without functional dependence | fail conservation |
 | `representation-specific` | effect exists only in the reference representation | fail conservation / scientific criteria |
+| `coverage-family-deficit` | two valid exactly paired representation families are supplied under a policy requiring three | fail coverage only |
 | `calibration-reversal` | primary budget is positive while a secondary budget reverses sign | pass using only the primary estimand |
 | missing-pair corruption | one exact-paired observation is deleted | reject the analysis input |
+
+The coverage-negative DGM is intentionally different from the missing-pair corruption. Its evidence is structurally valid and exactly paired. Effect, adversary-survival, and conservation evidence are constructed to pass. The policy simply requires one more independent representation family than the study supplies, so `coverage` should be the sole scientific failure.
 
 Participant heterogeneity and measurement noise are generated independently under deterministic seeds. The suite uses exactly paired representation families and participant-level inference.
 
@@ -99,7 +103,7 @@ The core software contract currently requires:
 
 - effect-null false-positive rate <= 0.10;
 - known-positive recovery >= 0.90;
-- adversarial decision error <= 0.10;
+- adversarial decision error <= 0.10, now including the valid coverage-family deficit;
 - expected failure localization >= 0.90;
 - calibration-reversal recovery >= 0.90;
 - missing exact pairs must be rejected.
@@ -151,14 +155,13 @@ The validation suite is an adversary for the benchmark, not a certificate of bio
 
 ## Next expansion
 
-The highest-value additions after v0.19 are:
+With all four confirmatory gates now receiving both expected-PASS and expected-FAIL support in the development diagnostics, the next highest-value additions are:
 
-1. effect-size, sample-size, heterogeneity, and missingness sweeps for empirical power/type-I surfaces;
-2. calibrated interval-coverage and bias operating curves rather than single fixture values;
-3. stronger comparative methods beyond the two deliberately weak negative controls;
-4. non-invertible representation transforms and nuisance-specificity simulations;
-5. dataset-level hierarchical simulation for multi-study replication;
-6. multiplicity scenarios spanning candidate mechanisms, layers, tasks, and metrics;
-7. causal/interventional known-truth simulations for the BMRB causal ladder.
+1. stronger comparative methods beyond the two deliberately weak negative controls;
+2. non-invertible representation transforms and nuisance-specificity simulations;
+3. multiplicity scenarios spanning candidate mechanisms, layers, tasks, and metrics;
+4. dataset-level hierarchical simulation for multi-study replication;
+5. causal/interventional known-truth simulations for the BMRB causal ladder;
+6. publication-quality operating-curve and gate-diagnostic figures from the frozen development authority.
 
-Those additions turn validation from a contract suite into a genuine methods-study simulation program.
+Those additions should remain sequential, and the already separated final-evaluation seed partition should stay unopened until the complete acceptance plan is scientifically justified and preregistered.
