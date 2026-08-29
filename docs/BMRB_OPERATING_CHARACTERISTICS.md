@@ -56,10 +56,12 @@ participants:          4, 8, 16, 32
 effect scale:          0.50, 0.75, 1.00, 1.25
 heterogeneity scale:   0.50, 1.00, 2.00
 measurement noise:     0.50, 1.00, 2.00
-scenarios:             all v0.19 core known-truth scenarios
+scenarios:             7 registered core known-truth DGMs
 ```
 
-This is 864 cells before Monte Carlo replication. It is a development recommendation, not a universal final-study grid or biological power calculation.
+The seventh DGM, `coverage-family-deficit`, preserves valid exact pairing and strong evidence on the preceding gates while requiring three representation families and supplying two. That gives the coverage gate explicit expected-FAIL support without conflating scientific insufficiency with malformed evidence.
+
+The recommended development design is therefore **1008 cells** before Monte Carlo replication. It is a development recommendation, not a universal final-study grid or biological power calculation.
 
 The exact final grid should be committed or externally registered before its final evaluation partition is executed.
 
@@ -123,21 +125,19 @@ result = run_bmrb_operating_characteristics(policy)
 write_bmrb_operating_characteristics(result, "bmrb-operating-development.json")
 ```
 
-Do not use the 864-cell example casually in ordinary CI. `qualification_smoke_grid()` exists for small deterministic software tests.
+Do not use the 1008-cell example casually in ordinary CI. `qualification_smoke_grid()` exists for small deterministic software tests.
 
 ## What is still missing for a full methods paper
 
-This first operating layer does **not** yet solve the full validation program. High-value next expansions include:
+All four confirmatory gates now have dedicated expected-PASS and expected-FAIL truth support in the registered development DGM family. The next high-value expansions are therefore different kinds of stress rather than another basic gate fixture:
 
 - near-boundary effect grids chosen from a frozen design rationale rather than post hoc inspection;
 - more Monte Carlo replications with explicit precision targets;
-- response-mixture / responder-nonresponder DGMs;
-- unequal repeated-session counts and structured missingness curves;
 - stronger reduced comparator methods under matched information sets;
 - multiplicity strategies across many mechanisms or evidence axes;
 - study/dataset-level hierarchical replication;
 - causal/interventional known-truth DGMs;
-- publication-quality operating-curve figures and tables.
+- publication-quality operating-curve and gate-diagnostic figures and tables.
 
 Those should be added sequentially so a change in the data-generating mechanism remains distinguishable from a change in the BMRB decision machinery.
 
