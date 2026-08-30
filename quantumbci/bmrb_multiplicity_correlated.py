@@ -179,7 +179,7 @@ def run_bmrb_correlated_multiplicity_stress(
     primary_invariant = all(vector == primary_vectors[0] for vector in primary_vectors[1:])
     naive_nested = all(
         all((not earlier) or later for earlier, later in zip(left, right, strict=True))
-        for left, right in zip(naive_vectors, naive_vectors[1:], strict=True)
+        for left, right in zip(naive_vectors, naive_vectors[1:])
     )
     one_draw_equals_primary = naive_vectors[0] == primary_vectors[0]
 
