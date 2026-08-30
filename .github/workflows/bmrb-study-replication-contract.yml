@@ -1,0 +1,91 @@
+name: BMRB study replication contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-bmrb-study-replication-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  study-replication:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify study replication authority and adapter
+        run: |
+          python -m pytest -q tests/test_bmrb_study_replication.py
+
+      - name: Static-check study replication surfaces
+        run: |
+          python -m ruff check \
+            quantumbci/bmrb_study_replication.py \
+            quantumbci/bmrb_study_replication_stress.py \
+            tests/test_bmrb_study_replication.py
+
+      - name: Qualify installed participant-imbalance adversary
+        run: |
+          python - <<'PY'
+          from quantumbci.bmrb_study_replication_stress import (
+              BMRB_STUDY_REPLICATION_STRESS_BENCHMARK,
+              run_bmrb_study_replication_stress,
+          )
+
+          result = run_bmrb_study_replication_stress(
+              large_study_participants=500,
+              small_study_participants=20,
+          )
+          assert result['benchmark'] == BMRB_STUDY_REPLICATION_STRESS_BENCHMARK
+          assert result['official_decision_invariant_to_participant_swap'] is True
+          assert result['participant_weighting_reverses_majority_headline'] is True
+          assert result['study_positive_fraction_invariant'] is True
+          assert result['context_specific_primary_preserved'] is True
+          assert result['positive_control_broad_replication_passed'] is True
+          assert result['positive_control_broad_claim_promotion_eligible'] is True
+          assert result['large_primary']['broad_claim_promotion_eligible'] is False
+          assert result['small_primary']['broad_claim_promotion_eligible'] is False
+          PY
+
+      - name: Keep study replication claim boundary explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          authority = Path('quantumbci/bmrb_study_replication.py').read_text(encoding='utf-8')
+          stress = Path('quantumbci/bmrb_study_replication_stress.py').read_text(encoding='utf-8')
+          docs = Path('docs/BMRB_STUDY_REPLICATION.md').read_text(encoding='utf-8')
+          seal = Path('quantumbci/bmrb_evaluation_seal.py').read_text(encoding='utf-8')
+
+          assert 'never treats participant count as the number of replications' in authority
+          assert 'does not validate biological truth' in stress
+          assert 'does not validate biological truth' in docs
+          assert 'Participant-weighted summaries are diagnostic only' in authority
+          assert 'sealed final-evaluation partition remains unexecuted' in docs
+          assert 'physical-quantum' in docs
+          assert 'does not execute the final evaluation partition' in seal
+          assert 'run_bmrb_operating_characteristics' not in seal
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf /tmp/qbc-study-replication-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-study-replication-wheel
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheel = next(Path('/tmp/qbc-study-replication-wheel').glob('quantum_bci-*.whl'))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert 'quantumbci/bmrb_study_replication.py' in names
+          assert 'quantumbci/bmrb_study_replication_stress.py' in names
+          PY
