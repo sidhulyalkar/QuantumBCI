@@ -160,9 +160,8 @@ def run_bmrb_study_replication_stress(
         "large_primary": large_primary.to_mapping(),
         "small_primary": small_primary.to_mapping(),
         "official_decision_invariant_to_participant_swap": (
-            large_primary.replication_criteria_passed
-            == small_primary.replication_criteria_passed
-            == False
+            not large_primary.replication_criteria_passed
+            and not small_primary.replication_criteria_passed
         ),
         "participant_weighted_positive_fraction_large_primary": first_weighted,
         "participant_weighted_positive_fraction_small_primary": second_weighted,
