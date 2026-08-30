@@ -5,9 +5,10 @@ can change after evidence is seen. This module freezes a conservative adaptive s
 top of the single-family BMRB multiplicity authority.
 
 The search protocol controls discovery/inspection only. It never transfers confirmatory promotion
-authority away from the one primary candidate frozen by ``BMRBMultiplicityPlan``. Complete
-candidate evidence is still required when the multiplicity decision is applied, so adaptive early
-stopping cannot silently erase failed or uninspected hypotheses from the confirmatory record.
+authority away from the one primary candidate frozen by ``BMRBMultiplicityPlan``.
+Complete candidate evidence is still required when the multiplicity decision is applied, so
+adaptive early stopping cannot silently erase failed or uninspected hypotheses from the
+confirmatory record.
 """
 
 from __future__ import annotations
