@@ -1,9 +1,9 @@
 """Study-level replication authority for broad BMRB mechanism claims.
 
 This layer consumes one finished confirmatory evidence object per independent study or
-dataset. It never reopens participant rows and never treats participant count as the
-number of replications. A large study can therefore improve its own within-study
-precision without acquiring extra votes at the cross-study layer.
+dataset. It never reopens participant rows. It never treats participant count as the number of replications.
+A large study can therefore improve its own within-study precision without acquiring
+extra votes at the cross-study layer.
 
 A failed broad-replication decision does not erase study-specific evidence. The result
 keeps positive and failed studies visible so a mechanism may remain context-specific
