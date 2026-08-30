@@ -154,6 +154,20 @@ def test_adaptive_search_requires_complete_closed_world_evidence() -> None:
         run_adaptive_search(plan, complete)
 
 
+def test_nonfinite_routing_evidence_fails_closed() -> None:
+    plan = _manual_plan()
+    evidence = {
+        candidate_id: _replicate(effect=0.02, passed=False)
+        for candidate_id in plan.multiplicity_plan.candidate_ids
+    }
+    evidence[plan.multiplicity_plan.primary_candidate_id] = _replicate(
+        effect=float("nan"),
+        passed=False,
+    )
+    with pytest.raises(ValueError, match="finite number"):
+        run_adaptive_search(plan, evidence)
+
+
 def test_plan_fingerprint_binds_routing_and_stopping_authority() -> None:
     plan = _manual_plan()
     changed_cutoff = replace(plan, routing_effect_cutoff=0.06)
@@ -192,6 +206,16 @@ def test_invalid_adaptive_authority_fails_closed() -> None:
             above_cutoff_stride=1,
             below_cutoff_stride=2,
             scientific_rationale="Budget cannot exceed the frozen universe.",
+        )
+    with pytest.raises(ValueError, match="finite number"):
+        BMRBAdaptiveSearchPlan(
+            plan_id="nonfinite-cutoff",
+            multiplicity_plan=multiplicity,
+            max_evaluations=3,
+            routing_effect_cutoff=float("nan"),
+            above_cutoff_stride=1,
+            below_cutoff_stride=2,
+            scientific_rationale="Routing authority must reject nonfinite cutoffs.",
         )
 
 
