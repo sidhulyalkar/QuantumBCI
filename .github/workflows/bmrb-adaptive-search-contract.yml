@@ -1,0 +1,98 @@
+name: BMRB adaptive search contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-bmrb-adaptive-search-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adaptive-search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify adaptive search authority and stress
+        run: |
+          python -m pytest -q tests/test_bmrb_adaptive_search.py
+
+      - name: Static-check adaptive search surfaces
+        run: |
+          python -m ruff check \
+            quantumbci/bmrb_adaptive_search.py \
+            quantumbci/bmrb_adaptive_search_stress.py \
+            tests/test_bmrb_adaptive_search.py
+
+      - name: Qualify installed adaptive search stress
+        run: |
+          python - <<'PY'
+          from quantumbci.bmrb_adaptive_search_stress import (
+              BMRB_ADAPTIVE_SEARCH_STRESS_BENCHMARK,
+              run_bmrb_adaptive_search_stress,
+          )
+
+          result = run_bmrb_adaptive_search_stress(
+              family_replicates=8,
+              candidate_count=20,
+              participants=4,
+              bootstrap_resamples=100,
+              seed=5901,
+          )
+          assert result['benchmark'] == BMRB_ADAPTIVE_SEARCH_STRESS_BENCHMARK
+          assert result['scenario']['reference_effect'] < result['scenario'][
+              'validation_effect_threshold'
+          ]
+          assert result['adaptive_matches_exhaustive_with_full_budget'] is True
+          assert result['adaptive_any_survivor_rate'] == result[
+              'exhaustive_any_survivor_rate'
+          ]
+          assert result['adaptive_any_survivor_rate'] > result[
+              'authorized_primary_promotion_rate'
+          ]
+          assert result['adaptive_winner_picking_amplification'] > 0.0
+          assert result['nonprimary_adaptive_survivor_rate'] > 0.0
+          assert result['primary_authority_never_transferred'] is True
+          PY
+
+      - name: Keep adaptive claim boundary explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          authority = Path('quantumbci/bmrb_adaptive_search.py').read_text(encoding='utf-8')
+          stress = Path('quantumbci/bmrb_adaptive_search_stress.py').read_text(encoding='utf-8')
+          docs = Path('docs/BMRB_ADAPTIVE_SEARCH.md').read_text(encoding='utf-8')
+          seal = Path('quantumbci/bmrb_evaluation_seal.py').read_text(encoding='utf-8')
+
+          assert 'Complete candidate evidence is still required' in authority
+          assert 'does not validate biological truth' in stress
+          assert 'does not validate biological truth' in docs
+          assert 'sealed final-evaluation partition' in docs
+          assert 'physical-quantum' in docs
+          assert 'does not execute the final evaluation partition' in seal
+          assert 'run_bmrb_operating_characteristics' not in seal
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf /tmp/qbc-adaptive-search-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-adaptive-search-wheel
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheel = next(Path('/tmp/qbc-adaptive-search-wheel').glob('quantum_bci-*.whl'))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert 'quantumbci/bmrb_adaptive_search.py' in names
+          assert 'quantumbci/bmrb_adaptive_search_stress.py' in names
+          PY
