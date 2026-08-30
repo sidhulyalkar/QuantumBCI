@@ -26,7 +26,9 @@ def default_adaptive_search_plan(*, candidate_count: int = 20) -> BMRBAdaptiveSe
     candidate_count = int(candidate_count)
     if candidate_count < 2:
         raise ValueError("candidate_count must be at least two")
-    multiplicity_plan = winner_picking_demo_plan(exploratory_candidates=candidate_count - 1)
+    multiplicity_plan = winner_picking_demo_plan(
+        exploratory_candidates=candidate_count - 1
+    )
     return BMRBAdaptiveSearchPlan(
         plan_id="known-null-outcome-routed-search-v1",
         multiplicity_plan=multiplicity_plan,
@@ -101,17 +103,27 @@ def run_bmrb_adaptive_search_stress(
         transcripts.append(run_adaptive_search(plan, evidence))
 
     adaptive = np.asarray(
-        [transcript.naive_adaptive_survivor for transcript in transcripts], dtype=float
+        [transcript.naive_adaptive_survivor for transcript in transcripts],
+        dtype=float,
     )
     authorized = np.asarray(
-        [transcript.authorized_primary_promotion for transcript in transcripts], dtype=float
+        [transcript.authorized_primary_promotion for transcript in transcripts],
+        dtype=float,
     )
     exhaustive = np.asarray(
-        [transcript.exhaustive_any_survivor for transcript in transcripts], dtype=float
+        [transcript.exhaustive_any_survivor for transcript in transcripts],
+        dtype=float,
     )
-    evaluations = np.asarray([len(transcript.steps) for transcript in transcripts], dtype=float)
-    stopped = np.asarray(
-        [any(step.scientific_criteria_passed for step in transcript.steps) for transcript in transcripts],
+    evaluations = np.asarray(
+        [len(transcript.steps) for transcript in transcripts],
+        dtype=float,
+    )
+    early_stop = np.asarray(
+        [
+            transcript.naive_adaptive_survivor
+            and len(transcript.steps) < plan.max_evaluations
+            for transcript in transcripts
+        ],
         dtype=float,
     )
     nonprimary_stop = np.asarray(
@@ -145,11 +157,15 @@ def run_bmrb_adaptive_search_stress(
         "adaptive_any_survivor_rate": adaptive_rate,
         "exhaustive_any_survivor_rate": exhaustive_rate,
         "authorized_primary_promotion_rate": authorized_rate,
-        "adaptive_winner_picking_amplification": float(adaptive_rate - authorized_rate),
+        "adaptive_winner_picking_amplification": float(
+            adaptive_rate - authorized_rate
+        ),
         "nonprimary_adaptive_survivor_rate": float(np.mean(nonprimary_stop)),
-        "early_stop_rate": float(np.mean(stopped)),
+        "early_stop_rate": float(np.mean(early_stop)),
         "mean_evaluations_used": float(np.mean(evaluations)),
-        "adaptive_matches_exhaustive_with_full_budget": bool(np.array_equal(adaptive, exhaustive)),
+        "adaptive_matches_exhaustive_with_full_budget": bool(
+            np.array_equal(adaptive, exhaustive)
+        ),
         "primary_authority_never_transferred": all(
             not transcript.naive_adaptive_survivor
             or transcript.authorized_primary_promotion
