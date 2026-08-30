@@ -44,7 +44,9 @@ def _manual_plan() -> BMRBAdaptiveSearchPlan:
         routing_effect_cutoff=0.05,
         above_cutoff_stride=1,
         below_cutoff_stride=2,
-        scientific_rationale="CI fixture for deterministic outcome-routed candidate inspection.",
+        scientific_rationale=(
+            "CI fixture for deterministic outcome-routed candidate inspection."
+        ),
     )
 
 
@@ -86,13 +88,51 @@ def test_primary_pass_promotes_and_stops_immediately() -> None:
         for candidate_id in plan.multiplicity_plan.candidate_ids
     }
     evidence[plan.multiplicity_plan.primary_candidate_id] = _replicate(
-        effect=0.08, passed=True
+        effect=0.08,
+        passed=True,
     )
 
     transcript = run_adaptive_search(plan, evidence)
     assert len(transcript.steps) == 1
     assert transcript.naive_adaptive_survivor is True
     assert transcript.authorized_primary_promotion is True
+
+
+def test_uninspected_nonprimary_result_cannot_change_primary_authority() -> None:
+    multiplicity = winner_picking_demo_plan(exploratory_candidates=2)
+    plan = BMRBAdaptiveSearchPlan(
+        plan_id="one-inspection-authority-fixture",
+        multiplicity_plan=multiplicity,
+        max_evaluations=1,
+        routing_effect_cutoff=0.05,
+        above_cutoff_stride=1,
+        below_cutoff_stride=2,
+        scientific_rationale=(
+            "Prove that uninspected non-primary outcomes cannot alter primary promotion."
+        ),
+    )
+    baseline = {
+        candidate_id: _replicate(effect=0.02, passed=False)
+        for candidate_id in multiplicity.candidate_ids
+    }
+    altered = dict(baseline)
+    altered[multiplicity.candidate_ids[2]] = _replicate(effect=0.20, passed=True)
+
+    baseline_transcript = run_adaptive_search(plan, baseline)
+    altered_transcript = run_adaptive_search(plan, altered)
+
+    assert baseline_transcript.to_mapping()["inspected_candidate_ids"] == [
+        multiplicity.primary_candidate_id
+    ]
+    assert altered_transcript.to_mapping()["inspected_candidate_ids"] == [
+        multiplicity.primary_candidate_id
+    ]
+    assert baseline_transcript.authorized_primary_promotion is False
+    assert altered_transcript.authorized_primary_promotion is False
+    assert baseline_transcript.naive_adaptive_survivor is False
+    assert altered_transcript.naive_adaptive_survivor is False
+    assert baseline_transcript.exhaustive_any_survivor is False
+    assert altered_transcript.exhaustive_any_survivor is True
 
 
 def test_adaptive_search_requires_complete_closed_world_evidence() -> None:
@@ -169,7 +209,9 @@ def test_known_null_adaptive_stress_reproduces_search_amplification_without_auth
         "validation_effect_threshold"
     ]
     assert result["adaptive_matches_exhaustive_with_full_budget"] is True
-    assert result["adaptive_any_survivor_rate"] == result["exhaustive_any_survivor_rate"]
+    assert result["adaptive_any_survivor_rate"] == result[
+        "exhaustive_any_survivor_rate"
+    ]
     assert result["adaptive_any_survivor_rate"] > result[
         "authorized_primary_promotion_rate"
     ]
