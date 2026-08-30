@@ -12,8 +12,8 @@ without being promoted as broadly replicated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from .confirmatory_representation import ConfirmatoryRepresentationResult
@@ -160,7 +160,9 @@ class BMRBStudyReplicationPolicy:
     @property
     def replication_study_ids(self) -> tuple[str, ...]:
         return tuple(
-            item.study_id for item in sorted(self.studies, key=lambda item: item.order) if item.role == "replication"
+            item.study_id
+            for item in sorted(self.studies, key=lambda item: item.order)
+            if item.role == "replication"
         )
 
     def decision_payload(self) -> dict[str, Any]:
@@ -169,7 +171,9 @@ class BMRBStudyReplicationPolicy:
             "method": BMRB_STUDY_REPLICATION_METHOD,
             "policy_id": self.policy_id,
             "mechanism_id": self.mechanism_id,
-            "studies": [item.to_mapping() for item in sorted(self.studies, key=lambda item: item.order)],
+            "studies": [
+                item.to_mapping() for item in sorted(self.studies, key=lambda item: item.order)
+            ],
             "min_successful_replications": self.min_successful_replications,
             "primary_must_pass": True,
             "study_weighting": "one_independent_study_one_vote",
@@ -251,7 +255,11 @@ class BMRBStudyEvidence:
     def __post_init__(self) -> None:
         for name in ("study_id", "dataset_id", "mechanism_id", "source_fingerprint"):
             object.__setattr__(self, name, _required_text(name, getattr(self, name)))
-        object.__setattr__(self, "participant_count", _positive_int("participant_count", self.participant_count))
+        object.__setattr__(
+            self,
+            "participant_count",
+            _positive_int("participant_count", self.participant_count),
+        )
         for name in (
             "scientific_criteria_passed",
             "confirmatory_authority",
@@ -305,11 +313,19 @@ class BMRBStudyEvidence:
             confirmatory_authority=_strict_bool(
                 "confirmatory_authority", payload.get("confirmatory_authority")
             ),
-            promotion_eligible=_strict_bool("promotion_eligible", payload.get("promotion_eligible")),
+            promotion_eligible=_strict_bool(
+                "promotion_eligible", payload.get("promotion_eligible")
+            ),
             reference_effect=_finite("reference_effect", payload.get("reference_effect")),
-            reference_ci_lower=_finite("reference_ci_lower", payload.get("reference_ci_lower")),
-            reference_ci_upper=_finite("reference_ci_upper", payload.get("reference_ci_upper")),
-            source_fingerprint=_required_text("source_fingerprint", payload.get("source_fingerprint")),
+            reference_ci_lower=_finite(
+                "reference_ci_lower", payload.get("reference_ci_lower")
+            ),
+            reference_ci_upper=_finite(
+                "reference_ci_upper", payload.get("reference_ci_upper")
+            ),
+            source_fingerprint=_required_text(
+                "source_fingerprint", payload.get("source_fingerprint")
+            ),
         )
         supplied = payload.get("evidence_fingerprint")
         if supplied is not None and str(supplied) != evidence.evidence_fingerprint:
@@ -429,7 +445,9 @@ def evaluate_study_replication(
     if supplied_ids != frozen_ids:
         missing = sorted(frozen_ids - supplied_ids)
         extra = sorted(supplied_ids - frozen_ids)
-        raise ValueError(f"study evidence must match frozen family exactly; missing={missing} extra={extra}")
+        raise ValueError(
+            f"study evidence must match frozen family exactly; missing={missing} extra={extra}"
+        )
 
     ordered: list[BMRBStudyEvidence] = []
     source_fingerprints: set[str] = set()
@@ -446,9 +464,7 @@ def evaluate_study_replication(
                 f"expected={policy.mechanism_id!r} observed={item.mechanism_id!r}"
             )
         if item.source_fingerprint in source_fingerprints:
-            raise ValueError(
-                "independent study slots cannot reuse the same source_fingerprint"
-            )
+            raise ValueError("independent study slots cannot reuse the same source_fingerprint")
         source_fingerprints.add(item.source_fingerprint)
         ordered.append(item)
 
@@ -481,5 +497,7 @@ def evaluate_study_replication(
         study_effect_min=float(min(effects)),
         study_effect_max=float(max(effects)),
         study_effect_range=float(max(effects) - min(effects)),
-        all_studies_confirmatory_authority=all(item.confirmatory_authority for item in ordered),
+        all_studies_confirmatory_authority=all(
+            item.confirmatory_authority for item in ordered
+        ),
     )
