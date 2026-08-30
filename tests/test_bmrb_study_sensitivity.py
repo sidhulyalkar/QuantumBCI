@@ -201,7 +201,7 @@ def test_policy_round_trip_and_preregistration_binding() -> None:
 
 
 def test_policy_fails_closed_on_nonfinite_or_invalid_thresholds() -> None:
-    with pytest.raises(ValueError, match="\[0, 1\]"):
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
         BMRBStudySensitivityPolicy(
             policy_id="bad",
             min_direction_agreement_fraction=1.1,
