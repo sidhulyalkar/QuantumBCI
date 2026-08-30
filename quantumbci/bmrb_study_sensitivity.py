@@ -2,8 +2,8 @@
 
 This v1 layer is deliberately sensitivity-only. It consumes a completed
 ``BMRBStudyReplicationDecision`` and quantifies cross-study directional agreement,
-effect spread, leave-one-study-out influence, and replication-margin fragility. It does
-not alter the already-qualified replication promotion decision.
+effect spread, leave-one-study-out influence, and replication-margin fragility.
+It does not alter the already-qualified replication promotion decision.
 
 Thresholds are explicit policy content rather than universal biological constants. A
 future promotion-authoritative heterogeneity method requires its own method identifier,
