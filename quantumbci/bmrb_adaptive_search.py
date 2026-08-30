@@ -43,6 +43,18 @@ def _positive_int(name: str, value: Any) -> int:
     return integer
 
 
+def _finite_float(name: str, value: Any) -> float:
+    if type(value) is bool:
+        raise ValueError(f"{name} must be a finite number")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be a finite number")
+    return number
+
+
 @dataclass(frozen=True)
 class BMRBAdaptiveSearchPlan:
     """Frozen outcome-routed inspection policy over one closed multiplicity family."""
@@ -66,11 +78,11 @@ class BMRBAdaptiveSearchPlan:
         if maximum > len(self.multiplicity_plan.candidates):
             raise ValueError("max_evaluations must not exceed the frozen candidate count")
         object.__setattr__(self, "max_evaluations", maximum)
-
-        cutoff = float(self.routing_effect_cutoff)
-        if not math.isfinite(cutoff):
-            raise ValueError("routing_effect_cutoff must be finite")
-        object.__setattr__(self, "routing_effect_cutoff", cutoff)
+        object.__setattr__(
+            self,
+            "routing_effect_cutoff",
+            _finite_float("routing_effect_cutoff", self.routing_effect_cutoff),
+        )
 
         above = _positive_int("above_cutoff_stride", self.above_cutoff_stride)
         below = _positive_int("below_cutoff_stride", self.below_cutoff_stride)
@@ -135,7 +147,9 @@ class BMRBAdaptiveSearchPlan:
             max_evaluations=_positive_int(
                 "max_evaluations", payload.get("max_evaluations", 0)
             ),
-            routing_effect_cutoff=float(payload.get("routing_effect_cutoff", float("nan"))),
+            routing_effect_cutoff=_finite_float(
+                "routing_effect_cutoff", payload.get("routing_effect_cutoff")
+            ),
             above_cutoff_stride=_positive_int(
                 "above_cutoff_stride", payload.get("above_cutoff_stride", 0)
             ),
@@ -262,13 +276,17 @@ def run_adaptive_search(
         visited.add(current_index)
         candidate_id = candidate_ids[current_index]
         replicate = evidence[candidate_id]
-        above = replicate.reference_observed_effect >= plan.routing_effect_cutoff
+        observed_effect = _finite_float(
+            f"evidence[{candidate_id!r}].reference_observed_effect",
+            replicate.reference_observed_effect,
+        )
+        above = observed_effect >= plan.routing_effect_cutoff
         route = "above_cutoff" if above else "below_cutoff"
         steps.append(
             BMRBAdaptiveSearchStep(
                 evaluation_index=evaluation_index,
                 candidate_id=candidate_id,
-                reference_observed_effect=replicate.reference_observed_effect,
+                reference_observed_effect=observed_effect,
                 scientific_criteria_passed=replicate.scientific_criteria_passed,
                 route=route,
             )
