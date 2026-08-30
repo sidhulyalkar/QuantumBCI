@@ -12,8 +12,8 @@ stopping cannot silently erase failed or uninspected hypotheses from the confirm
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .bmrb_multiplicity import BMRBMultiplicityPlan, apply_multiplicity_plan
