@@ -1,10 +1,9 @@
 """Known-truth operating characteristics for BMRB study-level replication.
 
-This module validates the *software hierarchy*, not biology. Each simulated study first
-runs through the production participant-level BMRB known-truth evaluator. Exactly one
-bounded study evidence object is then passed to the production study-replication layer,
-and the completed replication decision is passed to the production sensitivity layer.
-Participant rows are never pooled across studies.
+This validates the software hierarchy, not biology. Every simulated study first runs
+through the production participant-level BMRB known-truth evaluator. Exactly one bounded
+study evidence object then enters the production study-replication layer, whose completed
+decision enters the production sensitivity layer. Participant rows are never pooled across studies.
 
 Only the development seed partition is executable in v1. The evaluation partition is
 fingerprinted but remains sealed and unexecuted.
@@ -15,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import dataclass, replace
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Sequence
 
 import numpy as np
 
@@ -25,17 +24,14 @@ from .bmrb_study_replication import (
     BMRBStudyReplicationSlot,
     evaluate_study_replication,
 )
-from .bmrb_study_sensitivity import (
-    BMRBStudySensitivityPolicy,
-    assess_study_sensitivity,
-)
-from .preregistration import PreregistrationEvidence, canonical_scientific_fingerprint
+from .bmrb_study_sensitivity import BMRBStudySensitivityPolicy, assess_study_sensitivity
 from .bmrb_validation import (
-    BMRBValidationScenario,
     BMRBValidationReplicate,
+    BMRBValidationScenario,
     default_validation_scenarios,
     run_validation_replicate,
 )
+from .preregistration import PreregistrationEvidence, canonical_scientific_fingerprint
 
 BMRB_STUDY_OPERATING_BENCHMARK = "BMRB_STUDY_KNOWN_TRUTH_OPERATING_CURVES_V1"
 BMRB_STUDY_OPERATING_METHOD = "hierarchical_frozen_grid_monte_carlo_v1"
@@ -77,7 +73,12 @@ def _hex_identity(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
-def _wilson_interval(successes: int, trials: int, *, z: float = 1.959963984540054) -> tuple[float, float]:
+def _wilson_interval(
+    successes: int,
+    trials: int,
+    *,
+    z: float = 1.959963984540054,
+) -> tuple[float, float]:
     if trials < 1:
         raise ValueError("Wilson interval requires at least one trial")
     p = successes / trials
@@ -93,10 +94,11 @@ class StudySimulationSeedPartition:
     """Disjoint deterministic seed authority for cells, replicates, and studies."""
 
     development_offset: int = 31_000_000
-    evaluation_offset: int = 731_000_000
+    evaluation_offset: int = 2_031_000_000
     cell_stride: int = 1_000_000
     replicate_stride: int = 10_000
     study_stride: int = 101
+    max_cells: int = 1024
     max_replicates_per_cell: int = 64
     max_studies_per_replicate: int = 16
 
@@ -107,11 +109,11 @@ class StudySimulationSeedPartition:
             "cell_stride",
             "replicate_stride",
             "study_stride",
+            "max_cells",
             "max_replicates_per_cell",
             "max_studies_per_replicate",
         ):
-            value = _positive_int(name, getattr(self, name))
-            object.__setattr__(self, name, value)
+            object.__setattr__(self, name, _positive_int(name, getattr(self, name)))
         max_study_span = (self.max_studies_per_replicate - 1) * self.study_stride
         if self.replicate_stride <= max_study_span:
             raise ValueError("replicate_stride must exceed the maximum study seed span")
@@ -120,8 +122,9 @@ class StudySimulationSeedPartition:
         )
         if self.cell_stride <= max_replicate_span:
             raise ValueError("cell_stride must exceed the maximum replicate seed span")
-        if abs(self.evaluation_offset - self.development_offset) <= self.cell_stride:
-            raise ValueError("development and evaluation seed authorities are too close")
+        full_partition_span = (self.max_cells - 1) * self.cell_stride + max_replicate_span
+        if abs(self.evaluation_offset - self.development_offset) <= full_partition_span:
+            raise ValueError("development and evaluation seed spaces overlap")
 
     def effective_seed(
         self,
@@ -133,12 +136,12 @@ class StudySimulationSeedPartition:
     ) -> int:
         if partition not in {"development", "evaluation"}:
             raise ValueError("partition must be development or evaluation")
+        if not 0 <= cell_index < self.max_cells:
+            raise ValueError("cell_index exceeds seed authority capacity")
         if not 0 <= replicate < self.max_replicates_per_cell:
             raise ValueError("replicate exceeds seed authority capacity")
         if not 0 <= study_index < self.max_studies_per_replicate:
             raise ValueError("study_index exceeds seed authority capacity")
-        if cell_index < 0:
-            raise ValueError("cell_index must be non-negative")
         offset = self.development_offset if partition == "development" else self.evaluation_offset
         return int(
             offset
@@ -157,6 +160,7 @@ class StudySimulationSeedPartition:
                 "cell_stride": self.cell_stride,
                 "replicate_stride": self.replicate_stride,
                 "study_stride": self.study_stride,
+                "max_cells": self.max_cells,
                 "max_replicates_per_cell": self.max_replicates_per_cell,
                 "max_studies_per_replicate": self.max_studies_per_replicate,
             },
@@ -181,8 +185,7 @@ class BMRBStudyOperatingScenario:
         object.__setattr__(self, "study_truths", truths)
         if len(truths) < 3:
             raise ValueError("study operating scenarios require at least three studies")
-        allowed = {"positive", "null", "reversal"}
-        unknown = sorted(set(truths) - allowed)
+        unknown = sorted(set(truths) - {"positive", "null", "reversal"})
         if unknown:
             raise ValueError(f"unknown study truth labels: {unknown}")
         minimum = _positive_int("min_successful_replications", self.min_successful_replications)
@@ -216,7 +219,7 @@ class BMRBStudyOperatingScenario:
 
 
 def default_study_operating_scenarios() -> tuple[BMRBStudyOperatingScenario, ...]:
-    """Declared higher-level truths. Thresholds are software fixtures, not biological defaults."""
+    """Declared higher-level truths; all minima are software fixtures, not biological defaults."""
 
     return (
         BMRBStudyOperatingScenario(
@@ -225,8 +228,8 @@ def default_study_operating_scenarios() -> tuple[BMRBStudyOperatingScenario, ...
             2,
             True,
             False,
-            False,
-            "Primary plus both independent replications share the positive mechanism.",
+            True,
+            "All studies are positive, but requiring both replications leaves zero redundancy margin.",
         ),
         BMRBStudyOperatingScenario(
             "homogeneous-null-3",
@@ -234,8 +237,8 @@ def default_study_operating_scenarios() -> tuple[BMRBStudyOperatingScenario, ...
             2,
             False,
             False,
-            True,
-            "All three studies carry a declared effect-null pattern.",
+            False,
+            "All three studies carry a declared effect-null pattern without heterogeneity.",
         ),
         BMRBStudyOperatingScenario(
             "homogeneous-positive-4",
@@ -252,8 +255,8 @@ def default_study_operating_scenarios() -> tuple[BMRBStudyOperatingScenario, ...
             2,
             False,
             False,
-            True,
-            "Four independent effect-null studies must not promote a broad mechanism.",
+            False,
+            "Four independent effect-null studies must not promote and need not warn for heterogeneity.",
         ),
         BMRBStudyOperatingScenario(
             "primary-only-positive-4",
@@ -308,8 +311,8 @@ class BMRBStudyOperatingGrid:
             raise ValueError("scenario_ids must be non-empty and unique")
         object.__setattr__(self, "scenario_ids", scenario_ids)
         participants = tuple(_positive_int("participant_count", item) for item in self.participant_counts)
-        if any(item < 4 for item in participants):
-            raise ValueError("participant counts must be at least four")
+        if not participants or any(item < 4 for item in participants):
+            raise ValueError("participant counts must be non-empty and at least four")
         object.__setattr__(self, "participant_counts", participants)
         for name in (
             "within_study_heterogeneity_scales",
@@ -331,12 +334,6 @@ class BMRBStudyOperatingGrid:
             * len(self.cross_study_effect_scales)
         )
 
-    @property
-    def fingerprint(self) -> str:
-        return canonical_scientific_fingerprint(
-            "quantumbci.bmrb-study-operating-grid.v1", self.to_mapping()
-        )
-
     def to_mapping(self) -> dict[str, Any]:
         return {
             "scenario_ids": list(self.scenario_ids),
@@ -346,6 +343,12 @@ class BMRBStudyOperatingGrid:
             "cross_study_effect_scales": list(self.cross_study_effect_scales),
             "cell_count": self.cell_count,
         }
+
+    @property
+    def fingerprint(self) -> str:
+        return canonical_scientific_fingerprint(
+            "quantumbci.bmrb-study-operating-grid.v1", self.to_mapping()
+        )
 
 
 def qualification_smoke_grid() -> BMRBStudyOperatingGrid:
@@ -389,9 +392,13 @@ class BMRBStudyOperatingPolicy:
         reps = _positive_int("replicates_per_cell", self.replicates_per_cell)
         if reps > self.seed_partition.max_replicates_per_cell:
             raise ValueError("replicates_per_cell exceeds seed authority capacity")
+        if self.grid.cell_count > self.seed_partition.max_cells:
+            raise ValueError("operating grid exceeds seed authority cell capacity")
         object.__setattr__(self, "replicates_per_cell", reps)
         object.__setattr__(
-            self, "bootstrap_resamples", _positive_int("bootstrap_resamples", self.bootstrap_resamples)
+            self,
+            "bootstrap_resamples",
+            _positive_int("bootstrap_resamples", self.bootstrap_resamples),
         )
         direction = float(self.sensitivity_min_direction_agreement)
         if not math.isfinite(direction) or not 0.0 <= direction <= 1.0:
@@ -479,25 +486,25 @@ class BMRBStudyOperatingResult:
     cells: tuple[BMRBStudyOperatingCell, ...]
 
     def aggregate_mapping(self) -> dict[str, Any]:
-        null_cells = [cell for cell in self.cells if not cell.expected_replication_pass]
-        positive_cells = [cell for cell in self.cells if cell.expected_replication_pass]
-        fragile_cells = [cell for cell in self.cells if cell.expected_sensitivity_warning]
-        robust_cells = [cell for cell in self.cells if not cell.expected_sensitivity_warning]
+        negative = [cell for cell in self.cells if not cell.expected_replication_pass]
+        positive = [cell for cell in self.cells if cell.expected_replication_pass]
+        warning = [cell for cell in self.cells if cell.expected_sensitivity_warning]
+        no_warning = [cell for cell in self.cells if not cell.expected_sensitivity_warning]
         return {
             "mean_false_promotion_rate": float(
-                np.mean([cell.observed_replication_pass_rate for cell in null_cells])
+                np.mean([cell.observed_replication_pass_rate for cell in negative])
             ),
             "mean_known_positive_recovery_rate": float(
-                np.mean([cell.observed_replication_pass_rate for cell in positive_cells])
+                np.mean([cell.observed_replication_pass_rate for cell in positive])
             ),
             "mean_context_semantics_match_rate": float(
                 np.mean([cell.context_specific_match_rate for cell in self.cells])
             ),
-            "mean_fragile_warning_match_rate": float(
-                np.mean([cell.sensitivity_warning_match_rate for cell in fragile_cells])
+            "mean_expected_warning_match_rate": float(
+                np.mean([cell.sensitivity_warning_match_rate for cell in warning])
             ),
-            "mean_robust_warning_match_rate": float(
-                np.mean([cell.sensitivity_warning_match_rate for cell in robust_cells])
+            "mean_expected_no_warning_match_rate": float(
+                np.mean([cell.sensitivity_warning_match_rate for cell in no_warning])
             ),
             "qualification_defined": False,
         }
@@ -514,9 +521,9 @@ class BMRBStudyOperatingResult:
             "evaluation_partition_executed": False,
             "physical_quantum_promotion_eligible": False,
             "interpretation": (
-                "Known-truth study-level simulation validates hierarchical BMRB software "
-                "behavior. It does not validate biological truth, define a universal replication "
-                "threshold, or authorize physical-quantum claims."
+                "Known-truth study-level simulation validates hierarchical BMRB software behavior. "
+                "It does not validate biological truth, define a universal replication threshold, "
+                "or authorize physical-quantum claims."
             ),
         }
         return {
@@ -593,7 +600,7 @@ def _registered_replication_policy(
         ),
         min_successful_replications=scenario.min_successful_replications,
         scientific_rationale=(
-            "Synthetic higher-level operating-characteristic policy. The replication minimum is "
+            "Synthetic higher-level operating policy. The replication minimum is a "
             "scenario-specific software truth, not a universal biological threshold."
         ),
     )
@@ -613,15 +620,17 @@ def _registered_replication_policy(
     )
 
 
-def _sensitivity_policy(policy: BMRBStudyOperatingPolicy, *, cell_index: int) -> BMRBStudySensitivityPolicy:
+def _sensitivity_policy(
+    policy: BMRBStudyOperatingPolicy,
+    *,
+    cell_index: int,
+) -> BMRBStudySensitivityPolicy:
     return BMRBStudySensitivityPolicy(
         policy_id=f"study-operating-sensitivity:{cell_index}",
         min_direction_agreement_fraction=policy.sensitivity_min_direction_agreement,
         max_effect_range=policy.sensitivity_max_effect_range,
         max_leave_one_out_mean_shift=policy.sensitivity_max_leave_one_out_mean_shift,
-        scientific_rationale=(
-            "Known-truth software thresholds for study-level sensitivity calibration only."
-        ),
+        scientific_rationale="Known-truth software thresholds for sensitivity calibration only.",
     )
 
 
@@ -732,17 +741,25 @@ def _summarize_cell(
     if not rows:
         raise ValueError("study operating cell requires replicates")
     pass_flags = [row.replication_criteria_passed for row in rows]
-    context_matches = [row.context_specific_only == scenario.expected_context_specific_only for row in rows]
-    warning_matches = [row.sensitivity_warning == scenario.expected_sensitivity_warning for row in rows]
+    context_matches = [
+        row.context_specific_only == scenario.expected_context_specific_only for row in rows
+    ]
+    warning_matches = [
+        row.sensitivity_warning == scenario.expected_sensitivity_warning for row in rows
+    ]
     pass_rate = float(np.mean(pass_flags))
     decision_error = float(
         np.mean([flag != scenario.expected_replication_pass for flag in pass_flags])
     )
     lower, upper = _wilson_interval(sum(pass_flags), len(rows))
-    if scenario.study_truths[0] == "null" and any(item == "positive" for item in scenario.study_truths[1:]):
-        primary_role = float(np.mean([not row.replication_criteria_passed for row in rows]))
-    else:
-        primary_role = 1.0
+    primary_failed_later_positive = scenario.study_truths[0] == "null" and any(
+        item == "positive" for item in scenario.study_truths[1:]
+    )
+    primary_role = (
+        float(np.mean([not row.replication_criteria_passed for row in rows]))
+        if primary_failed_later_positive
+        else 1.0
+    )
     if scenario.expected_sensitivity_warning and scenario.expected_replication_pass:
         fragile_detection = float(
             np.mean(
