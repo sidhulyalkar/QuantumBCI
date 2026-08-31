@@ -77,6 +77,8 @@ def _required_mapping(name: str, value: Any) -> Mapping[str, Any]:
 
 
 def _required_text(name: str, value: Any) -> str:
+    if value is None:
+        raise ValueError(f"{name} must not be empty")
     text = str(value).strip()
     if not text:
         raise ValueError(f"{name} must not be empty")
@@ -169,6 +171,13 @@ def _policy_from_mapping(
         raise ValueError("study operating policy benchmark mismatch")
     if payload.get("method") != BMRB_STUDY_OPERATING_METHOD:
         raise ValueError("study operating policy method mismatch")
+    supplied_seed_fingerprint = _sha256(
+        "policy.seed_partition_fingerprint", payload.get("seed_partition_fingerprint")
+    )
+    if supplied_seed_fingerprint != seed_partition.fingerprint:
+        raise ValueError(
+            "policy.seed_partition_fingerprint does not match supplied seed authority"
+        )
     grid = _grid_from_mapping(_required_mapping("policy.grid", payload.get("grid")))
     policy = BMRBStudyOperatingPolicy(
         study_id=_required_text("policy.study_id", payload.get("study_id")),
@@ -348,7 +357,10 @@ class BMRBStudySearchAuthority:
                 "scientific_rationale", payload.get("scientific_rationale")
             ),
         )
-        if _sha256("authority_fingerprint", payload.get("authority_fingerprint")) != authority.authority_fingerprint:
+        if (
+            _sha256("authority_fingerprint", payload.get("authority_fingerprint"))
+            != authority.authority_fingerprint
+        ):
             raise ValueError("study search authority fingerprint mismatch")
         if authority.to_mapping() != dict(payload):
             raise ValueError("study search authority is noncanonical")
@@ -373,7 +385,8 @@ class BMRBStudyHierarchyAuthority:
         direction = _optional_fraction(
             "sensitivity_min_direction_agreement", self.sensitivity_min_direction_agreement
         )
-        assert direction is not None
+        if direction is None:
+            raise ValueError("sensitivity_min_direction_agreement is required")
         object.__setattr__(self, "sensitivity_min_direction_agreement", direction)
         for name in (
             "sensitivity_max_effect_range",
@@ -391,6 +404,9 @@ class BMRBStudyHierarchyAuthority:
         scenario_by_id = {
             scenario.scenario_id: scenario for scenario in default_study_operating_scenarios()
         }
+        unknown = sorted(set(policy.grid.scenario_ids) - set(scenario_by_id))
+        if unknown:
+            raise ValueError(f"unknown study operating scenario ids: {unknown}")
         payload = [scenario_by_id[scenario_id].to_mapping() for scenario_id in policy.grid.scenario_ids]
         return cls(
             scenario_contract_fingerprint=canonical_scientific_fingerprint(
@@ -459,7 +475,10 @@ class BMRBStudyHierarchyAuthority:
                 payload.get("sensitivity_max_leave_one_out_mean_shift", math.nan)
             ),
         )
-        if _sha256("authority_fingerprint", payload.get("authority_fingerprint")) != authority.authority_fingerprint:
+        if (
+            _sha256("authority_fingerprint", payload.get("authority_fingerprint"))
+            != authority.authority_fingerprint
+        ):
             raise ValueError("study hierarchy authority fingerprint mismatch")
         if authority.to_mapping() != dict(payload):
             raise ValueError("study hierarchy authority is noncanonical")
@@ -532,7 +551,9 @@ class BMRBStudyOperatingAcceptancePlan:
 
     @staticmethod
     def _require_bounds(criteria: tuple[StudyOperatingAcceptanceCriterion, ...]) -> None:
-        by_aggregate = {criterion.metric: criterion for criterion in criteria if criterion.scenario_id is None}
+        by_aggregate = {
+            criterion.metric: criterion for criterion in criteria if criterion.scenario_id is None
+        }
         for metric, direction in REQUIRED_AGGREGATE_BOUNDS.items():
             criterion = by_aggregate.get(metric)
             if criterion is None:
