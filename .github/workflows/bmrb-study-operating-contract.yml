@@ -1,0 +1,98 @@
+name: BMRB study operating characteristics contract
+
+on:
+  pull_request:
+    paths:
+      - "quantumbci/bmrb_study_operating.py"
+      - "quantumbci/bmrb_study_replication.py"
+      - "quantumbci/bmrb_study_sensitivity.py"
+      - "quantumbci/bmrb_validation.py"
+      - "quantumbci/preregistration.py"
+      - "tests/test_bmrb_study_operating.py"
+      - "docs/BMRB_STUDY_OPERATING_CHARACTERISTICS.md"
+      - ".github/workflows/bmrb-study-operating-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study-operating:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify hierarchical study operating semantics
+        run: python -m pytest -q tests/test_bmrb_study_operating.py
+
+      - name: Static-check study operating surfaces
+        run: |
+          python -m ruff check \
+            quantumbci/bmrb_study_operating.py \
+            tests/test_bmrb_study_operating.py
+
+      - name: Exercise installed development smoke grid
+        run: |
+          python - <<'PY'
+          from quantumbci.bmrb_study_operating import (
+              BMRBStudyOperatingPolicy,
+              qualification_smoke_grid,
+              run_bmrb_study_operating_characteristics,
+          )
+
+          policy = BMRBStudyOperatingPolicy(
+              study_id="ci-study-operating-v1",
+              source_sha="ci-merge-ref",
+              partition="development",
+              grid=qualification_smoke_grid(),
+              replicates_per_cell=1,
+              bootstrap_resamples=100,
+          )
+          result = run_bmrb_study_operating_characteristics(policy)
+          assert len(result.cells) == 8
+          assert all(cell.decision_error_rate == 0.0 for cell in result.cells)
+          assert all(cell.context_specific_match_rate == 1.0 for cell in result.cells)
+          assert all(cell.sensitivity_warning_match_rate == 1.0 for cell in result.cells)
+          assert result.aggregate_mapping()["qualification_defined"] is False
+          assert result.to_mapping()["evaluation_partition_executed"] is False
+          assert result.to_mapping()["physical_quantum_promotion_eligible"] is False
+          PY
+
+      - name: Keep hierarchy and sealed-evaluation claims explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path("quantumbci/bmrb_study_operating.py").read_text(encoding="utf-8")
+          docs = Path("docs/BMRB_STUDY_OPERATING_CHARACTERISTICS.md").read_text(encoding="utf-8")
+          seal = Path("quantumbci/bmrb_evaluation_seal.py").read_text(encoding="utf-8")
+
+          assert "Participant rows are never pooled across studies" in source
+          assert "study-level evaluation partition remains sealed in v1" in source
+          assert '"qualification_defined": False' in source
+          assert "not a random-effects or hierarchical meta-analysis" in docs
+          assert "final evaluation partition remains sealed and unexecuted" in docs
+          assert "physical-quantum" in docs
+          assert "does not execute the final evaluation partition" in seal
+          assert "run_bmrb_operating_characteristics" not in seal
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build --wheel
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert "quantumbci/bmrb_study_operating.py" in names
+          PY
