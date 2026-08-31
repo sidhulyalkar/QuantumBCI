@@ -1,0 +1,280 @@
+name: BMRB complete study development surface
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantumbci-bmrb-study-development-v1
+  cancel-in-progress: false
+
+env:
+  SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+  STUDY_ID: bmrb-study-development-v1
+  CELLS_PER_SHARD: "27"
+  REPLICATES_PER_CELL: "8"
+  BOOTSTRAP_RESAMPLES: "100"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      plan_fingerprint: ${{ steps.matrix.outputs.plan_fingerprint }}
+    steps:
+      - name: Checkout exact qualified science source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+      - name: Freeze deterministic 24-shard plan
+        run: |
+          mkdir -p development-plan
+          python -m quantumbci.bmrb_study_operating_shard_cli plan \
+            --study-id "$STUDY_ID" \
+            --source-sha "$SCIENCE_SOURCE_SHA" \
+            --grid recommended \
+            --replicates-per-cell "$REPLICATES_PER_CELL" \
+            --bootstrap-resamples "$BOOTSTRAP_RESAMPLES" \
+            --cells-per-shard "$CELLS_PER_SHARD" \
+            --output development-plan/plan.json
+      - name: Expose exact matrix
+        id: matrix
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          plan = json.loads(Path("development-plan/plan.json").read_text(encoding="utf-8"))
+          ranges = plan["ranges"]
+          assert plan["total_cells"] == 648
+          assert plan["cells_per_shard"] == 27
+          assert len(ranges) == 24
+          assert ranges[0] == {"cell_count": 27, "start_cell": 0, "stop_cell": 27}
+          assert ranges[-1] == {"cell_count": 27, "start_cell": 621, "stop_cell": 648}
+          include = [
+              {
+                  "shard": f"{index:02d}",
+                  "start": item["start_cell"],
+                  "stop": item["stop_cell"],
+              }
+              for index, item in enumerate(ranges)
+          ]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("matrix=" + json.dumps({"include": include}, separators=(",", ":")) + "\n")
+              handle.write("plan_fingerprint=" + plan["plan_fingerprint"] + "\n")
+          PY
+      - name: Upload frozen plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: bmrb-study-development-plan
+          path: development-plan/plan.json
+          if-no-files-found: error
+          retention-days: 30
+
+  shard:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Checkout exact qualified science source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+      - name: Execute one exact development block
+        run: |
+          mkdir -p development-shard
+          python -m quantumbci.bmrb_study_operating_shard_cli run \
+            --study-id "$STUDY_ID" \
+            --source-sha "$SCIENCE_SOURCE_SHA" \
+            --grid recommended \
+            --replicates-per-cell "$REPLICATES_PER_CELL" \
+            --bootstrap-resamples "$BOOTSTRAP_RESAMPLES" \
+            --start-cell "${{ matrix.start }}" \
+            --stop-cell "${{ matrix.stop }}" \
+            --output "development-shard/shard-${{ matrix.shard }}.json"
+      - name: Verify partial checkpoint remains non-scientific
+        run: |
+          SHARD_PATH="development-shard/shard-${{ matrix.shard }}.json" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ["SHARD_PATH"]).read_text(encoding="utf-8"))
+          assert payload["complete_operating_result"] is False
+          assert payload["qualification_defined"] is False
+          assert payload["evaluation_partition_executed"] is False
+          assert payload["physical_quantum_promotion_eligible"] is False
+          PY
+      - name: Upload partial checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: bmrb-study-development-shard-${{ matrix.shard }}
+          path: development-shard/shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  merge:
+    needs:
+      - plan
+      - shard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact qualified science source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+      - name: Download all 24 partial checkpoints
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bmrb-study-development-shard-*
+          path: development-shards
+          merge-multiple: true
+      - name: Fail closed on incomplete shard family
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          shards = sorted(Path("development-shards").glob("shard-*.json"))
+          assert len(shards) == 24, f"expected 24 exact shards, found {len(shards)}"
+          expected = [f"shard-{index:02d}.json" for index in range(24)]
+          observed = [path.name for path in shards]
+          assert observed == expected, (observed, expected)
+          PY
+      - name: Recompose complete verified development result
+        run: |
+          mkdir -p development-result
+          python -m quantumbci.bmrb_study_operating_shard_cli merge \
+            --study-id "$STUDY_ID" \
+            --source-sha "$SCIENCE_SOURCE_SHA" \
+            --grid recommended \
+            --replicates-per-cell "$REPLICATES_PER_CELL" \
+            --bootstrap-resamples "$BOOTSTRAP_RESAMPLES" \
+            --output development-result/development-result.json \
+            development-shards/shard-*.json
+      - name: Produce descriptive development surface summary
+        run: |
+          python - <<'PY'
+          import json
+          from collections import defaultdict
+          from pathlib import Path
+          from statistics import mean
+
+          from quantumbci.bmrb_study_operating_artifacts import verify_bmrb_study_operating_mapping
+
+          result_path = Path("development-result/development-result.json")
+          result = json.loads(result_path.read_text(encoding="utf-8"))
+          verified = verify_bmrb_study_operating_mapping(result)
+          cells = result["cells"]
+          assert len(cells) == 648
+          assert result["qualification_defined"] is False
+          assert result["evaluation_partition_executed"] is False
+          assert result["physical_quantum_promotion_eligible"] is False
+
+          metric_names = (
+              "observed_replication_pass_rate",
+              "decision_error_rate",
+              "context_specific_semantics_match_rate",
+              "sensitivity_warning_match_rate",
+              "primary_role_protection_rate",
+              "fragile_claim_detection_rate",
+              "mean_successful_replication_margin",
+              "mean_study_effect_range",
+          )
+
+          def summarize(rows):
+              return {
+                  name: mean(float(row[name]) for row in rows)
+                  for name in metric_names
+              }
+
+          scenario_groups = defaultdict(list)
+          participant_groups = defaultdict(list)
+          within_groups = defaultdict(list)
+          noise_groups = defaultdict(list)
+          cross_groups = defaultdict(list)
+          for cell in cells:
+              scenario_groups[cell["scenario_id"]].append(cell)
+              participant_groups[str(cell["participant_count"])].append(cell)
+              within_groups[str(cell["within_study_heterogeneity_scale"])].append(cell)
+              noise_groups[str(cell["measurement_noise_scale"])].append(cell)
+              cross_groups[str(cell["cross_study_effect_scale"])].append(cell)
+
+          summary = {
+              "purpose": "complete_development_surface_descriptive_summary",
+              "scientific_partition": "development",
+              "final_evaluation_executed": False,
+              "qualification_defined": False,
+              "science_source_sha": result["policy"]["source_sha"],
+              "policy_fingerprint": result["policy"]["policy_fingerprint"],
+              "artifact_fingerprint": result["artifact_fingerprint"],
+              "cell_count": len(cells),
+              "aggregate_mapping": result["aggregate_mapping"],
+              "by_scenario": {key: summarize(rows) for key, rows in sorted(scenario_groups.items())},
+              "by_participant_count": {key: summarize(rows) for key, rows in sorted(participant_groups.items(), key=lambda item: int(item[0]))},
+              "by_within_study_heterogeneity_scale": {key: summarize(rows) for key, rows in sorted(within_groups.items(), key=lambda item: float(item[0]))},
+              "by_measurement_noise_scale": {key: summarize(rows) for key, rows in sorted(noise_groups.items(), key=lambda item: float(item[0]))},
+              "by_cross_study_effect_scale": {key: summarize(rows) for key, rows in sorted(cross_groups.items(), key=lambda item: float(item[0]))},
+              "verified_artifact_fingerprint": verified.artifact_fingerprint,
+          }
+          Path("development-result/development-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          lines = [
+              "# BMRB complete study development surface",
+              "",
+              f"- cells: **{summary['cell_count']}**",
+              f"- science source: `{summary['science_source_sha']}`",
+              f"- policy: `{summary['policy_fingerprint']}`",
+              f"- artifact: `{summary['artifact_fingerprint']}`",
+              "- final evaluation executed: **false**",
+              "- qualification defined: **false**",
+              "",
+              "## Aggregate descriptive mapping",
+              "",
+              "```json",
+              json.dumps(summary["aggregate_mapping"], indent=2, sort_keys=True),
+              "```",
+              "",
+              "These are development operating characteristics, not final-evaluation evidence and not acceptance thresholds.",
+          ]
+          report = "\n".join(lines) + "\n"
+          Path("development-result/development-summary.md").write_text(report, encoding="utf-8")
+          with open(Path(__import__("os").environ["GITHUB_STEP_SUMMARY"]), "a", encoding="utf-8") as handle:
+              handle.write(report)
+          PY
+      - name: Upload complete development evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bmrb-study-complete-development-surface
+          path: development-result/
+          if-no-files-found: error
+          retention-days: 90
