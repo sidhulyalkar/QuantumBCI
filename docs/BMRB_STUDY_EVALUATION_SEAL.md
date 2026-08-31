@@ -165,5 +165,4 @@ not:
 - authorize a physical-quantum substrate interpretation.
 
 A future evaluation executor/adjudicator must be a separate method and should consume an
-externally registered seal. Until that method exists and is separately qualified, the final
-study-level evaluation partition remains sealed and unexecuted.
+externally registered seal. Until that method exists and is separately qualified, the final study-level evaluation partition remains sealed and unexecuted.
