@@ -286,13 +286,13 @@ def default_study_operating_scenarios() -> tuple[BMRBStudyOperatingScenario, ...
             "A zero-margin broad PASS with one directional context reversal should warn.",
         ),
         BMRBStudyOperatingScenario(
-            "redundant-positive-4",
-            ("positive", "positive", "positive", "positive"),
+            "redundant-one-conflict-5",
+            ("positive", "positive", "positive", "positive", "reversal"),
             2,
             True,
             False,
-            False,
-            "A broad PASS with three successful replications has positive redundancy margin.",
+            True,
+            "A broad PASS can have positive replication margin and still warrant a heterogeneity warning.",
         ),
     )
 
