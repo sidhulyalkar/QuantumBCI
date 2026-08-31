@@ -1,0 +1,118 @@
+name: BMRB study development runtime pilot
+
+on:
+  push:
+    branches:
+      - research/bmrb-study-runtime-pilot-v0.20
+    paths:
+      - ".github/workflows/bmrb-study-development-runtime-pilot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-pilot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Run worst-case development-only shard and measure throughput
+        env:
+          SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+        run: |
+          mkdir -p runtime-pilot
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          output = Path("runtime-pilot/shard-621-648.json")
+          command = [
+              sys.executable,
+              "-m",
+              "quantumbci.bmrb_study_operating_shard_cli",
+              "run",
+              "--study-id",
+              "bmrb-study-runtime-pilot-v1",
+              "--source-sha",
+              os.environ["SCIENCE_SOURCE_SHA"],
+              "--grid",
+              "recommended",
+              "--replicates-per-cell",
+              "8",
+              "--bootstrap-resamples",
+              "100",
+              "--start-cell",
+              "621",
+              "--stop-cell",
+              "648",
+              "--output",
+              str(output),
+          ]
+          started = time.perf_counter()
+          subprocess.run(command, check=True)
+          elapsed_seconds = time.perf_counter() - started
+
+          payload = json.loads(output.read_text(encoding="utf-8"))
+          entries = payload["entries"]
+          assert payload["range"] == {
+              "start_cell": 621,
+              "stop_cell": 648,
+              "cell_count": 27,
+          }
+          assert len(entries) == 27
+          assert {entry["cell"]["scenario_id"] for entry in entries} == {
+              "redundant-one-conflict-5"
+          }
+          assert {entry["cell"]["participant_count"] for entry in entries} == {16}
+          assert payload["complete_operating_result"] is False
+          assert payload["qualification_defined"] is False
+          assert payload["evaluation_partition_executed"] is False
+          assert payload["physical_quantum_promotion_eligible"] is False
+
+          participant_validation_calls = 27 * 8 * 5
+          full_program_validation_calls = 20_088
+          calls_per_second = participant_validation_calls / elapsed_seconds
+          serial_full_grid_seconds = full_program_validation_calls / calls_per_second
+          summary = {
+              "purpose": "operational_runtime_pilot_only",
+              "scientific_result": False,
+              "science_source_sha": os.environ["SCIENCE_SOURCE_SHA"],
+              "range": payload["range"],
+              "scenario_id": "redundant-one-conflict-5",
+              "participant_count": 16,
+              "outer_replicates_per_cell": 8,
+              "bootstrap_resamples": 100,
+              "participant_validation_calls": participant_validation_calls,
+              "elapsed_seconds": elapsed_seconds,
+              "participant_validation_calls_per_second": calls_per_second,
+              "naive_serial_full_grid_seconds": serial_full_grid_seconds,
+              "naive_serial_full_grid_minutes": serial_full_grid_seconds / 60.0,
+              "partial_shard_artifact_fingerprint": payload["artifact_fingerprint"],
+              "evaluation_partition_executed": False,
+          }
+          Path("runtime-pilot/summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload non-scientific runtime checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: bmrb-study-runtime-pilot
+          path: runtime-pilot/
+          if-no-files-found: error
+          retention-days: 14
