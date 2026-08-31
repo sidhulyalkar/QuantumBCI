@@ -71,6 +71,10 @@ def test_seed_authority_rejects_overlapping_stride_or_partition_designs() -> Non
 def test_declared_study_truths_cover_distinct_hierarchy_failure_modes() -> None:
     scenarios = {item.scenario_id: item for item in default_study_operating_scenarios()}
     assert len(scenarios) == 8
+    signatures = {
+        (item.study_truths, item.min_successful_replications) for item in scenarios.values()
+    }
+    assert len(signatures) == len(scenarios)
     assert scenarios["homogeneous-positive-3"].study_count == 3
     assert scenarios["homogeneous-positive-4"].study_count == 4
     assert scenarios["primary-only-positive-4"].expected_replication_pass is False
