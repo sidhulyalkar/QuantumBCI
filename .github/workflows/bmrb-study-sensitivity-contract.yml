@@ -1,0 +1,92 @@
+name: BMRB study sensitivity contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quantumbci-bmrb-study-sensitivity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  study-sensitivity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify study heterogeneity and influence semantics
+        run: python -m pytest -q tests/test_bmrb_study_sensitivity.py
+
+      - name: Static-check study sensitivity surfaces
+        run: |
+          python -m ruff check \
+            quantumbci/bmrb_study_sensitivity.py \
+            quantumbci/bmrb_study_sensitivity_stress.py \
+            tests/test_bmrb_study_sensitivity.py
+
+      - name: Qualify installed fragile-versus-redundant stress
+        run: |
+          python - <<'PY'
+          from quantumbci.bmrb_study_sensitivity_stress import (
+              BMRB_STUDY_SENSITIVITY_STRESS_BENCHMARK,
+              run_bmrb_study_sensitivity_stress,
+          )
+
+          result = run_bmrb_study_sensitivity_stress()
+          assert result['benchmark'] == BMRB_STUDY_SENSITIVITY_STRESS_BENCHMARK
+          assert result['both_replication_decisions_pass'] is True
+          assert result['both_replication_promotions_remain_eligible'] is True
+          assert result['fragile_has_zero_success_margin'] is True
+          assert result['fragile_single_replication_removal_flips'] is True
+          assert result['fragile_sensitivity_warning'] is True
+          assert result['robust_has_positive_success_margin'] is True
+          assert result['robust_single_replication_removal_does_not_flip'] is True
+          assert result['robust_sensitivity_passes'] is True
+          assert result['robust_has_no_sensitivity_warning'] is True
+          assert result['fragile_effect_range_exceeds_robust'] is True
+          assert result['fragile_influence_exceeds_robust'] is True
+          assert result['promotion_decision_unchanged_by_sensitivity'] is True
+          PY
+
+      - name: Keep sensitivity claim boundary explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          authority = Path('quantumbci/bmrb_study_sensitivity.py').read_text(encoding='utf-8')
+          stress = Path('quantumbci/bmrb_study_sensitivity_stress.py').read_text(encoding='utf-8')
+          docs = Path('docs/BMRB_STUDY_SENSITIVITY.md').read_text(encoding='utf-8')
+          seal = Path('quantumbci/bmrb_evaluation_seal.py').read_text(encoding='utf-8')
+
+          assert 'does not alter the already-qualified replication promotion decision' in authority
+          assert 'promotion_authoritative' in authority
+          assert 'does not validate biological truth' in stress
+          assert 'does not validate biological truth' in docs
+          assert 'not promotion-authoritative' in docs
+          assert 'final-evaluation partition remains unexecuted' in docs
+          assert 'physical-quantum' in docs
+          assert 'does not execute the final evaluation partition' in seal
+          assert 'run_bmrb_operating_characteristics' not in seal
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf /tmp/qbc-study-sensitivity-wheel
+          python -m pip wheel . --no-deps --wheel-dir /tmp/qbc-study-sensitivity-wheel
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheel = next(Path('/tmp/qbc-study-sensitivity-wheel').glob('quantum_bci-*.whl'))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert 'quantumbci/bmrb_study_sensitivity.py' in names
+          assert 'quantumbci/bmrb_study_sensitivity_stress.py' in names
+          PY
