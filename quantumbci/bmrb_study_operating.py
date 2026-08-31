@@ -692,9 +692,11 @@ def run_study_operating_replicate(
             measurement_scale=measurement_scale,
             cross_study_scale=cross_study_scale,
         )
+        # Outer replicate identity is already fully encoded by the seed authority above.
+        # Passing zero prevents production validation from applying a second replicate offset.
         row = run_validation_replicate(
             truth,
-            replicate=replicate,
+            replicate=0,
             seed=seed,
             participants=participants,
             bootstrap_resamples=policy.bootstrap_resamples,
