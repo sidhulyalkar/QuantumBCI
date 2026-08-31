@@ -1,0 +1,137 @@
+name: BMRB study development shards contract
+
+on:
+  pull_request:
+    paths:
+      - "quantumbci/bmrb_study_operating.py"
+      - "quantumbci/bmrb_study_operating_artifacts.py"
+      - "quantumbci/bmrb_study_operating_shards.py"
+      - "quantumbci/bmrb_study_operating_shard_cli.py"
+      - "tests/test_bmrb_study_operating_shards.py"
+      - "docs/BMRB_STUDY_DEVELOPMENT_EXECUTION.md"
+      - ".github/workflows/bmrb-study-development-shards-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study-development-shards:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify deterministic shard semantics
+        run: python -m pytest -q tests/test_bmrb_study_operating_shards.py
+
+      - name: Static-check shard execution surface
+        run: |
+          python -m ruff check \
+            quantumbci/bmrb_study_operating_shards.py \
+            quantumbci/bmrb_study_operating_shard_cli.py \
+            tests/test_bmrb_study_operating_shards.py
+
+      - name: Exercise installed split and exact recomposition
+        run: |
+          tmpdir="$(mktemp -d)"
+          python -m quantumbci.bmrb_study_operating_shard_cli plan \
+            --study-id ci-study-shards \
+            --source-sha ci-merge-ref \
+            --grid smoke \
+            --replicates-per-cell 1 \
+            --cells-per-shard 4 \
+            --output "$tmpdir/plan.json"
+          python -m quantumbci.bmrb_study_operating_shard_cli run \
+            --study-id ci-study-shards \
+            --source-sha ci-merge-ref \
+            --grid smoke \
+            --replicates-per-cell 1 \
+            --start-cell 0 \
+            --stop-cell 4 \
+            --output "$tmpdir/shard-a.json"
+          python -m quantumbci.bmrb_study_operating_shard_cli run \
+            --study-id ci-study-shards \
+            --source-sha ci-merge-ref \
+            --grid smoke \
+            --replicates-per-cell 1 \
+            --start-cell 4 \
+            --stop-cell 8 \
+            --output "$tmpdir/shard-b.json"
+          python -m quantumbci.bmrb_study_operating_shard_cli merge \
+            --study-id ci-study-shards \
+            --source-sha ci-merge-ref \
+            --grid smoke \
+            --replicates-per-cell 1 \
+            --output "$tmpdir/result.json" \
+            "$tmpdir/shard-a.json" "$tmpdir/shard-b.json"
+          TMPDIR_QBCI="$tmpdir" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from quantumbci.bmrb_study_operating import (
+              BMRBStudyOperatingPolicy,
+              qualification_smoke_grid,
+              run_bmrb_study_operating_characteristics,
+          )
+
+          root = Path(os.environ["TMPDIR_QBCI"])
+          plan = json.loads((root / "plan.json").read_text(encoding="utf-8"))
+          observed = json.loads((root / "result.json").read_text(encoding="utf-8"))
+          policy = BMRBStudyOperatingPolicy(
+              study_id="ci-study-shards",
+              source_sha="ci-merge-ref",
+              partition="development",
+              grid=qualification_smoke_grid(),
+              replicates_per_cell=1,
+              bootstrap_resamples=100,
+          )
+          expected = run_bmrb_study_operating_characteristics(policy).to_mapping()
+          assert observed == expected
+          assert len(plan["ranges"]) == 2
+          assert plan["partial_shards_are_scientific_results"] is False
+          assert plan["evaluation_partition_executable"] is False
+          PY
+
+      - name: Keep partial evidence and final evaluation fail-closed
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          shards = Path("quantumbci/bmrb_study_operating_shards.py").read_text(encoding="utf-8")
+          cli = Path("quantumbci/bmrb_study_operating_shard_cli.py").read_text(encoding="utf-8")
+          docs = Path("docs/BMRB_STUDY_DEVELOPMENT_EXECUTION.md").read_text(encoding="utf-8")
+
+          assert '"complete_operating_result": False' in shards
+          assert '"qualification_defined": False' in shards
+          assert '"evaluation_partition_executed": False' in shards
+          assert '"physical_quantum_promotion_eligible": False' in shards
+          assert "study-level evaluation partition remains sealed in v1" in shards
+          assert 'partition="development"' in cli
+          assert "partition=\"evaluation\"" not in cli
+          assert "Partial shards are never scientific results" in docs
+          assert "final study-level evaluation partition remains sealed and unexecuted" in docs
+          assert "random-effects" in docs
+          assert "physical-quantum" in docs
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build --wheel
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert "quantumbci/bmrb_study_operating_shards.py" in names
+          assert "quantumbci/bmrb_study_operating_shard_cli.py" in names
+          PY
