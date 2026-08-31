@@ -118,8 +118,12 @@ construct an ADEMP-style simulation program:
 5. **Performance measures**: type-I error, power, interval coverage, effect bias,
    calibration, and failure-mode localization.
 
-A benchmark that cannot reject known nulls or recover known mechanisms should not be
-interpreted on EEG.
+The participant-level known-truth suite and frozen operating-grid machinery now cover a
+substantial part of this software-validation requirement. The next validation frontier is
+higher-level: independently generated studies must propagate through study-replication and
+heterogeneity/sensitivity authority with calibrated operating characteristics. A benchmark
+that cannot reject known nulls, recover known mechanisms, or preserve the intended study
+hierarchy should not be interpreted on EEG.
 
 ### Representation evidence must become multidimensional
 
@@ -186,12 +190,41 @@ foundation-model lanes should eventually bind:
 - resampling/filter/crop/window policy;
 - transfer regime and adaptation authority.
 
-### Cross-dataset inference needs another hierarchical level
+### Cross-dataset hierarchy now exists; validation and real replication remain
 
-Participants from several datasets should not simply be pooled as exchangeable rows. Once
-Kumar2024, Ma2020, Wang2026, and an external task family are present, BMRB needs a
-study/dataset-level replication or meta-analytic layer. Dataset/task should become a higher
-level of evidence, with heterogeneity made visible.
+The original audit identified a structural problem: participants from several datasets
+must not simply be pooled as exchangeable rows. The software hierarchy now addresses that
+problem explicitly.
+
+Merged BMRB study-replication authority consumes one finished study-level evidence object
+per frozen independent dataset/study, gives each study one replication vote regardless of
+participant count, requires a fixed primary study, rejects incomplete or extra study sets,
+and blocks duplicate dataset/source identities from manufacturing nominally independent
+replication. A failed broad-replication claim does not erase a positive context-specific
+study.
+
+Merged study-sensitivity authority makes higher-level disagreement visible through
+study-direction agreement, study-effect range, leave-one-study-out influence,
+replication-margin fragility, and the most influential study. This v1 sensitivity layer is
+deliberately **not promotion-authoritative**. A fragile broad PASS remains the same
+replication PASS while carrying a visible warning.
+
+The remaining blockers are now empirical and operating-characteristic rather than merely
+architectural:
+
+- validate the participant-to-study-to-replication hierarchy under declared cross-study
+  known truth, including primary-only effects, failed-primary/later-positive patterns,
+  conflicting contexts, and redundant positives;
+- measure false promotion, broad-positive recovery, primary-role protection, and
+  sensitivity-warning behavior across participant count, within-study noise, and
+  cross-study heterogeneity;
+- execute the eventual sealed evaluation partition only under a separately authorized
+  acceptance policy;
+- then obtain genuinely independent Kumar2024/Ma2020/Wang2026/external-task evidence.
+
+A formal random-effects or hierarchical meta-analysis is **not** implied by the existing
+study-vote layer. If introduced, it requires a new method identifier, preregistered
+estimand/decision policy, and its own known-truth validation.
 
 ### Multiplicity must be explicit
 
@@ -204,13 +237,19 @@ create researcher degrees of freedom. A paper needs either:
 
 Exploratory matrices can remain broad if clearly labelled exploratory.
 
+QuantumBCI now has explicit one-family/one-primary multiplicity authority plus correlated
+and adaptive candidate-search stress tests. The remaining publication burden is to bind
+those machine-readable authorities into the eventual final-evaluation acceptance artifact
+rather than relying on a free-text multiplicity description.
+
 ## First empirical paper program
 
 A defensible sequence is:
 
 ### Stage A: benchmark validation
 
-Run known-positive and known-null simulations before real EEG promotion.
+Run known-positive and known-null simulations before real EEG promotion, including both
+participant-level gate validation and higher-level study-replication operating curves.
 
 ### Stage B: Kumar2024 mechanism study
 
@@ -234,7 +273,9 @@ non-equivalent operator, contextual, dynamical, or intervention-predictive mecha
 ### Stage D: independent replication
 
 Replicate across Ma2020, Wang2026, then one task family outside the original motor-imagery
-setting.
+setting. Feed each finished dataset through the frozen study-level replication authority;
+do not pool participant rows across datasets. Report study-level heterogeneity and
+influence even when the broad replication rule passes.
 
 ## Candidate paper thesis
 
@@ -298,13 +339,17 @@ Avoid:
 QuantumBCI should be considered ready for a serious methods submission only when all are
 true:
 
-- BMRB has known-ground-truth positive/null validation;
+- participant-level and study-level BMRB known-ground-truth positive/null validation are
+  complete under frozen operating policies;
 - the primary real study is preregistered externally;
 - primary control/budget/model/layer/pooling choices are frozen before final evaluation;
 - participant-level effect sizes and uncertainty are reported;
 - strong specialist and foundation-model baselines are present;
 - at least one non-equivalent candidate mechanism is tested;
-- results replicate across more than one dataset or task authority;
+- results replicate across more than one independent dataset or task authority using the
+  study-level replication layer rather than pooled participants;
+- study-level heterogeneity and influential-study sensitivity are reported alongside broad
+  replication decisions;
 - every released result can be reconstructed from content-addressed evidence objects;
 - package installation, examples, tests, and release artifacts pass from a clean environment;
 - scientific and physical-quantum claim ceilings remain explicit.
