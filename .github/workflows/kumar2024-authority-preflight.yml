@@ -186,14 +186,18 @@ jobs:
               "native_resampling": True,
               "evaluation_fraction": evaluation_fraction,
               "cases": cases,
+              "dataset_structure_inspected": True,
+              "evidence_assignment_frozen": True,
+              "final_evaluation_indices_created": True,
               "e001_executed": False,
               "predictions_computed": False,
               "mechanism_effects_computed": False,
               "control_comparisons_computed": False,
-              "confirmatory_evidence_consumed": False,
+              "confirmatory_outcomes_observed": False,
               "interpretation": (
-                  "Real public EEG bytes and exact longitudinal evidence assignments were "
-                  "validated and fingerprinted without computing E001 outcomes."
+                  "Real public EEG structure and exact longitudinal evidence assignments were "
+                  "validated and fingerprinted. No E001, prediction, mechanism-effect, or "
+                  "control-comparison outcome was computed."
               ),
           }
           canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -203,26 +207,44 @@ jobs:
               encoding="utf-8",
           )
 
-          forbidden = {
+          # Validate the payload schema rather than grepping substrings. Boundary keys such as
+          # `predictions_computed=false` must not trip their own fail-closed guard.
+          forbidden_keys = {
               "accuracy",
               "auc",
               "candidate_advantage",
               "ablation_necessity",
-              "prediction",
               "effect_delta",
+              "prediction_values",
+              "predictions",
+              "candidate_metric",
+              "control_metric",
+              "ablated_metric",
           }
-          serialized = json.dumps(payload, sort_keys=True).lower()
-          leaked = sorted(term for term in forbidden if term in serialized)
+
+          def keys(value):
+              if isinstance(value, dict):
+                  for key, item in value.items():
+                      yield str(key)
+                      yield from keys(item)
+              elif isinstance(value, list):
+                  for item in value:
+                      yield from keys(item)
+
+          leaked = sorted(forbidden_keys.intersection(keys(payload)))
           if leaked:
-              raise RuntimeError(f"outcome-like fields leaked into preflight payload: {leaked}")
+              raise RuntimeError(f"outcome fields leaked into preflight payload: {leaked}")
+
           print(
               json.dumps(
                   {
                       "preflight_fingerprint": payload["preflight_fingerprint"],
                       "raw_dataset_fingerprint": raw["fingerprint"],
                       "case_count": len(cases),
+                      "dataset_structure_inspected": True,
+                      "evidence_assignment_frozen": True,
                       "mechanism_effects_computed": False,
-                      "confirmatory_evidence_consumed": False,
+                      "confirmatory_outcomes_observed": False,
                   },
                   indent=2,
                   sort_keys=True,
@@ -236,11 +258,14 @@ jobs:
           from pathlib import Path
 
           payload = json.loads(Path("kumar2024-preflight/preflight.json").read_text())
+          assert payload["dataset_structure_inspected"] is True
+          assert payload["evidence_assignment_frozen"] is True
+          assert payload["final_evaluation_indices_created"] is True
           assert payload["e001_executed"] is False
           assert payload["predictions_computed"] is False
           assert payload["mechanism_effects_computed"] is False
           assert payload["control_comparisons_computed"] is False
-          assert payload["confirmatory_evidence_consumed"] is False
+          assert payload["confirmatory_outcomes_observed"] is False
           assert len(payload["cases"]) == 2
           for case in payload["cases"]:
               assert case["held_out_session"] == "5"
