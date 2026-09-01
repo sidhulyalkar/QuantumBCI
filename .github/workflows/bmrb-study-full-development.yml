@@ -2,6 +2,9 @@ name: BMRB complete study development surface
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - research/bmrb-study-full-development-v0.20
 
 permissions:
   contents: read
@@ -84,7 +87,7 @@ jobs:
   shard:
     needs: plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       max-parallel: 8
@@ -200,7 +203,7 @@ jobs:
           metric_names = (
               "observed_replication_pass_rate",
               "decision_error_rate",
-              "context_specific_semantics_match_rate",
+              "context_specific_match_rate",
               "sensitivity_warning_match_rate",
               "primary_role_protection_rate",
               "fragile_claim_detection_rate",
@@ -235,7 +238,7 @@ jobs:
               "policy_fingerprint": result["policy"]["policy_fingerprint"],
               "artifact_fingerprint": result["artifact_fingerprint"],
               "cell_count": len(cells),
-              "aggregate_mapping": result["aggregate_mapping"],
+              "aggregate_mapping": result["aggregate"],
               "by_scenario": {key: summarize(rows) for key, rows in sorted(scenario_groups.items())},
               "by_participant_count": {key: summarize(rows) for key, rows in sorted(participant_groups.items(), key=lambda item: int(item[0]))},
               "by_within_study_heterogeneity_scale": {key: summarize(rows) for key, rows in sorted(within_groups.items(), key=lambda item: float(item[0]))},
@@ -264,7 +267,7 @@ jobs:
               json.dumps(summary["aggregate_mapping"], indent=2, sort_keys=True),
               "```",
               "",
-              "These are development operating characteristics, not final-evaluation evidence and not acceptance thresholds.",
+              "These are coarse development operating characteristics with eight outer replicates per cell. They are not final-evaluation evidence, precision tail-probability estimates, or acceptance thresholds.",
           ]
           report = "\n".join(lines) + "\n"
           Path("development-result/development-summary.md").write_text(report, encoding="utf-8")
