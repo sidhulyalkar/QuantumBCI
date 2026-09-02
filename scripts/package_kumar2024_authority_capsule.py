@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
-from hashlib import sha256
 import json
+from hashlib import sha256
 from pathlib import Path
 
 from quantumbci.kumar2024_authority_artifacts import (
