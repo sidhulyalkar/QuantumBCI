@@ -132,6 +132,9 @@ def test_primary_threshold_is_explicit_and_cohort_supported() -> None:
                 "rationale": "missing threshold must fail",
             }
         )
+    with pytest.raises(ValueError, match="minimum_effect must be non-negative"):
+        _criterion(minimum_effect=-0.001)
+
     with pytest.raises(ValueError, match="cohort-wide supported minimum"):
         Kumar2024E001DecisionPlan.from_verified_authority_capsule(
             CAPSULE,
@@ -175,7 +178,7 @@ def test_participant_inference_missing_evidence_and_subgroups_are_fixed() -> Non
     payload = deepcopy(_plan().to_mapping())
     payload["evidence_handling"]["invalid_evidence_is_scientific_null"] = True
     payload["plan_fingerprint"] = _plan_fingerprint(payload)
-    with pytest.raises(ValueError, match="scientific null"):
+    with pytest.raises(ValueError, match="invalid_evidence_is_scientific_null"):
         Kumar2024E001DecisionPlan.from_mapping(payload)
 
     payload = deepcopy(_plan().to_mapping())
