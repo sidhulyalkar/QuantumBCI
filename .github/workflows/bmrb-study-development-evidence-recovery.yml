@@ -11,7 +11,7 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 env:
   SOURCE_RUN_ID: "33467852855"
@@ -76,6 +76,22 @@ jobs:
           assert payload["physical_quantum_promotion_eligible"] is False
           PY
 
+      - name: Verify evidence capsule manifest before persistence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          root = Path("evidence/bmrb-study-development-v1")
+          manifest = json.loads((root / "sha256-manifest.json").read_text(encoding="utf-8"))
+          expected = {
+              path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in sorted(root.iterdir())
+              if path.is_file() and path.name != "sha256-manifest.json"
+          }
+          assert manifest == expected
+          PY
+
       - name: Upload verified development evidence capsule
         uses: actions/upload-artifact@v4
         with:
@@ -83,3 +99,15 @@ jobs:
           path: evidence/bmrb-study-development-v1/
           if-no-files-found: error
           retention-days: 90
+
+      - name: Commit the exact verified evidence bytes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add evidence/bmrb-study-development-v1
+          if git diff --cached --quiet; then
+            echo "Verified evidence capsule already matches the branch."
+          else
+            git commit -m "Preserve verified BMRB study development evidence"
+            git push origin HEAD:research/bmrb-study-development-evidence-v0.20
+          fi
