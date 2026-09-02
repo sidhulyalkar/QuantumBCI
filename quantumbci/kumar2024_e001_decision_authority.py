@@ -89,7 +89,10 @@ def _required_bool(name: str, value: Any, expected: bool | None = None) -> bool:
 
 
 def _finite(name: str, value: Any) -> float:
-    number = float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite") from exc
     if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return number
@@ -98,7 +101,10 @@ def _finite(name: str, value: Any) -> float:
 def _positive_int(name: str, value: Any, *, minimum: int = 1) -> int:
     if isinstance(value, bool):
         raise ValueError(f"{name} must be an integer")
-    number = int(value)
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer >= {minimum}") from exc
     if number < minimum or number != value:
         raise ValueError(f"{name} must be an integer >= {minimum}")
     return number
