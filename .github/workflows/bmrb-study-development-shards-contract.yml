@@ -116,7 +116,8 @@ jobs:
           assert 'partition="development"' in cli
           assert "partition=\"evaluation\"" not in cli
           assert "Partial shards are never scientific results" in docs
-          assert "final study-level evaluation partition remains sealed and unexecuted" in docs
+          assert "procedurally held out and unexecuted" in docs
+          assert "policy-enforced" in docs
           assert "random-effects" in docs
           assert "physical-quantum" in docs
           PY
