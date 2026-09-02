@@ -68,7 +68,7 @@ jobs:
           assert artifact["physical_quantum_promotion_eligible"] is False
           PY
 
-      - name: Keep final evaluation and claim ceilings sealed
+      - name: Keep final evaluation and claim ceilings fail-closed
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -84,7 +84,9 @@ jobs:
           assert "run_bmrb_study_operating_characteristics" not in seal
           assert "evaluation_partition_executed" in verifier
           assert "Fingerprints are integrity checks, not signatures" in docs
-          assert "final study-level evaluation partition remains sealed and unexecuted" in docs
+          assert "procedurally held out and unexecuted" in docs
+          assert "policy-enforced holdout" in docs
+          assert "not cryptographic" in docs
           assert "random-effects" in docs
           assert "physical-quantum" in docs
           PY
