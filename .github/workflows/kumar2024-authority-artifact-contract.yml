@@ -177,12 +177,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin "$EVIDENCE_BRANCH"
-          git rebase "origin/$EVIDENCE_BRANCH"
           git add evidence/kumar2024-authority-freeze-v1
           if git diff --cached --quiet; then
             echo "Verified Kumar2024 authority capsule already matches the branch."
           else
             git commit -m "Preserve verified Kumar2024 cohort authority"
+            git fetch origin "$EVIDENCE_BRANCH"
+            git rebase "origin/$EVIDENCE_BRANCH"
             git push origin "HEAD:$EVIDENCE_BRANCH"
           fi
