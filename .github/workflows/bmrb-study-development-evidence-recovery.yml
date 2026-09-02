@@ -16,6 +16,7 @@ permissions:
 env:
   SOURCE_RUN_ID: "33467852855"
   SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+  EVIDENCE_BRANCH: research/bmrb-study-development-evidence-v0.20
 
 jobs:
   recover:
@@ -25,7 +26,7 @@ jobs:
       - name: Checkout evidence tooling branch
         uses: actions/checkout@v7
         with:
-          ref: research/bmrb-study-development-evidence-v0.20
+          ref: ${{ env.EVIDENCE_BRANCH }}
 
       - name: Checkout exact qualified science source
         uses: actions/checkout@v7
@@ -104,10 +105,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$EVIDENCE_BRANCH"
+          git rebase "origin/$EVIDENCE_BRANCH"
           git add evidence/bmrb-study-development-v1
           if git diff --cached --quiet; then
             echo "Verified evidence capsule already matches the branch."
           else
             git commit -m "Preserve verified BMRB study development evidence"
-            git push origin HEAD:research/bmrb-study-development-evidence-v0.20
+            git push origin "HEAD:$EVIDENCE_BRANCH"
           fi
