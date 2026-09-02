@@ -1,0 +1,349 @@
+name: Recover verified BMRB study development evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/bmrb-study-development-evidence-v0.20
+    paths:
+      - .github/workflows/bmrb-study-development-evidence-recovery.yml
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  SOURCE_RUN_ID: "33467852855"
+  SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+  STUDY_ID: bmrb-study-development-v1
+  REPLICATES_PER_CELL: "8"
+  BOOTSTRAP_RESAMPLES: "100"
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout durable evidence branch
+        uses: actions/checkout@v7
+        with:
+          ref: research/bmrb-study-development-evidence-v0.20
+          fetch-depth: 1
+
+      - name: Checkout exact qualified science source
+        uses: actions/checkout@v7
+        with:
+          repository: sidhulyalkar/QuantumBCI
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+          path: science
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: science/pyproject.toml
+
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e './science[dev]'
+
+      - name: Download the already-computed 24 development shards
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: sidhulyalkar/QuantumBCI
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          pattern: bmrb-study-development-shard-*
+          path: development-shards
+          merge-multiple: true
+
+      - name: Fail closed on incomplete or renamed shard family
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          shards = sorted(Path("development-shards").glob("shard-*.json"))
+          expected = [f"shard-{index:02d}.json" for index in range(24)]
+          observed = [path.name for path in shards]
+          assert len(shards) == 24, f"expected 24 exact shards, found {len(shards)}"
+          assert observed == expected, (observed, expected)
+          PY
+
+      - name: Recompose and verify the exact 648-cell result
+        run: |
+          mkdir -p evidence/bmrb-study-development-v1
+          python -m quantumbci.bmrb_study_operating_shard_cli merge \
+            --study-id "$STUDY_ID" \
+            --source-sha "$SCIENCE_SOURCE_SHA" \
+            --grid recommended \
+            --replicates-per-cell "$REPLICATES_PER_CELL" \
+            --bootstrap-resamples "$BOOTSTRAP_RESAMPLES" \
+            --output evidence/bmrb-study-development-v1/development-result.json \
+            development-shards/shard-*.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from quantumbci.bmrb_study_operating_artifacts import verify_bmrb_study_operating_mapping
+
+          path = Path("evidence/bmrb-study-development-v1/development-result.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          verify_bmrb_study_operating_mapping(payload)
+          assert len(payload["cells"]) == 648
+          assert payload["policy"]["source_sha"] == "681ea12c436fce121ba74de6f877a8267e94dd3f"
+          assert payload["policy"]["partition"] == "development"
+          assert payload["qualification_defined"] is False
+          assert payload["evaluation_partition_executed"] is False
+          assert payload["physical_quantum_promotion_eligible"] is False
+          PY
+
+      - name: Build applicability-aware analysis and execution provenance
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import platform
+          import subprocess
+          from collections import defaultdict
+          from pathlib import Path
+          from statistics import mean
+
+          import numpy as np
+          from quantumbci.bmrb_study_operating_artifacts import verify_bmrb_study_operating_mapping
+
+          out = Path("evidence/bmrb-study-development-v1")
+          result_path = out / "development-result.json"
+          result = json.loads(result_path.read_text(encoding="utf-8"))
+          verify_bmrb_study_operating_mapping(result)
+          cells = result["cells"]
+
+          generic_metrics = (
+              "observed_replication_pass_rate",
+              "decision_error_rate",
+              "context_specific_match_rate",
+              "sensitivity_warning_match_rate",
+              "mean_successful_replication_margin",
+              "mean_study_effect_range",
+          )
+
+          def avg(rows, metric):
+              return float(mean(float(row[metric]) for row in rows))
+
+          def summarize(rows):
+              return {metric: avg(rows, metric) for metric in generic_metrics}
+
+          by_scenario = defaultdict(list)
+          by_scenario_participant = defaultdict(list)
+          by_scenario_cross = defaultdict(list)
+          for cell in cells:
+              sid = cell["scenario_id"]
+              by_scenario[sid].append(cell)
+              by_scenario_participant[(sid, int(cell["participant_count"]))].append(cell)
+              by_scenario_cross[(sid, float(cell["cross_study_effect_scale"]))].append(cell)
+
+          pure_null_ids = {"homogeneous-null-3", "homogeneous-null-4"}
+          homogeneous_positive_ids = {"homogeneous-positive-3", "homogeneous-positive-4"}
+          contextual_veto_ids = {
+              "primary-only-positive-4",
+              "primary-fail-replications-positive-4",
+          }
+          conflict_positive_ids = {"fragile-one-conflict-4", "redundant-one-conflict-5"}
+
+          def select(ids):
+              return [cell for cell in cells if cell["scenario_id"] in ids]
+
+          def wilson(successes, trials, z=1.959963984540054):
+              p = successes / trials
+              z2 = z * z
+              den = 1.0 + z2 / trials
+              center = (p + z2 / (2.0 * trials)) / den
+              radius = z * ((p * (1.0 - p) + z2 / (4.0 * trials)) / trials) ** 0.5 / den
+              return [max(0.0, center - radius), min(1.0, center + radius)]
+
+          primary_fail_rows = by_scenario["primary-fail-replications-positive-4"]
+          fragile_rows = by_scenario["fragile-one-conflict-4"]
+
+          worst = sorted(
+              cells,
+              key=lambda row: (
+                  float(row["decision_error_rate"]),
+                  1.0 - float(row["sensitivity_warning_match_rate"]),
+              ),
+              reverse=True,
+          )[:20]
+          worst_cells = [
+              {
+                  key: row[key]
+                  for key in (
+                      "scenario_id",
+                      "participant_count",
+                      "within_study_heterogeneity_scale",
+                      "measurement_noise_scale",
+                      "cross_study_effect_scale",
+                      "observed_replication_pass_rate",
+                      "decision_error_rate",
+                      "sensitivity_warning_match_rate",
+                      "pass_rate_ci_lower",
+                      "pass_rate_ci_upper",
+                  )
+              }
+              for row in worst
+          ]
+
+          analysis = {
+              "purpose": "applicability_aware_development_analysis_v1",
+              "scientific_partition": "development",
+              "science_source_sha": result["policy"]["source_sha"],
+              "policy_fingerprint": result["policy"]["policy_fingerprint"],
+              "artifact_fingerprint": result["artifact_fingerprint"],
+              "cell_count": len(cells),
+              "replicates_per_cell": result["policy"]["replicates_per_cell"],
+              "bootstrap_resamples": result["policy"]["bootstrap_resamples"],
+              "evaluation_partition_executed": False,
+              "qualification_defined": False,
+              "physical_quantum_promotion_eligible": False,
+              "legacy_aggregate_mapping": {
+                  "values": result["aggregate"],
+                  "interpretation": "Retained for v1 fidelity only. False-promotion and recovery aggregates mix scientifically distinct scenario classes and are not treated here as classical Type-I error or power estimands.",
+              },
+              "estimand_classes": {
+                  "pure_null_broad_promotion_rate": avg(select(pure_null_ids), "observed_replication_pass_rate"),
+                  "homogeneous_positive_broad_recovery_rate": avg(select(homogeneous_positive_ids), "observed_replication_pass_rate"),
+                  "contextual_or_failed_primary_broad_promotion_rate": avg(select(contextual_veto_ids), "observed_replication_pass_rate"),
+                  "conflicted_positive_broad_recovery_rate": avg(select(conflict_positive_ids), "observed_replication_pass_rate"),
+                  "failed_primary_role_protection_rate": avg(primary_fail_rows, "primary_role_protection_rate"),
+                  "fragile_conflict_detection_rate": avg(fragile_rows, "fragile_claim_detection_rate"),
+              },
+              "by_scenario": {sid: summarize(rows) for sid, rows in sorted(by_scenario.items())},
+              "by_scenario_and_participant_count": {
+                  f"{sid}|n={n}": summarize(rows)
+                  for (sid, n), rows in sorted(by_scenario_participant.items())
+              },
+              "by_scenario_and_cross_study_effect_scale": {
+                  f"{sid}|cross={scale:g}": summarize(rows)
+                  for (sid, scale), rows in sorted(by_scenario_cross.items())
+              },
+              "metric_applicability": {
+                  "primary_role_protection_rate": "Interpreted only for primary-fail-replications-positive-4. v1 stores 1.0 in non-applicable scenarios.",
+                  "fragile_claim_detection_rate": "Interpreted only for fragile-one-conflict-4 here. v1 stores 1.0 in many non-applicable scenarios.",
+                  "cross_study_effect_scale": "No global marginal is reported. In v1 the axis perturbs candidate effect only for positive-labelled studies and is inert for all-null scenarios.",
+                  "sensitivity_warning_under_null": "Direction agreement is referenced to the observed primary sign. Near a true zero effect the sign is noise, so no-warning match is not a well-posed heterogeneity target without magnitude gating.",
+              },
+              "coarse_rate_resolution": {
+                  "step": 1.0 / 8.0,
+                  "wilson_95_for_0_of_8": wilson(0, 8),
+                  "wilson_95_for_1_of_8": wilson(1, 8),
+                  "wilson_95_for_8_of_8": wilson(8, 8),
+                  "interpretation": "Eight outer replicates per cell map gross regimes; they do not provide precision tail-probability calibration.",
+              },
+              "worst_20_cells_by_decision_error_then_warning_mismatch": worst_cells,
+              "claim_boundary": "Development-only deterministic software evidence. It does not define acceptance thresholds, execute final evaluation, validate biological truth, establish universal generalization, or authorize physical-quantum promotion.",
+          }
+          (out / "development-analysis.json").write_text(
+              json.dumps(analysis, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+
+          provenance = {
+              "source_workflow_run_id": 33467852855,
+              "source_workflow_head_sha": "4838be9857a42b0633dfd53c78cdc62f1a45df5d",
+              "science_source_sha": "681ea12c436fce121ba74de6f877a8267e94dd3f",
+              "recovery_workflow_run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "recovery_workflow_commit_sha": os.environ["GITHUB_SHA"],
+              "runner_os": os.environ.get("RUNNER_OS"),
+              "runner_arch": os.environ.get("RUNNER_ARCH"),
+              "runner_image_os": os.environ.get("ImageOS"),
+              "runner_image_version": os.environ.get("ImageVersion"),
+              "python": platform.python_version(),
+              "numpy": np.__version__,
+              "pip": subprocess.check_output(["python", "-m", "pip", "--version"], text=True).strip(),
+              "artifact_fingerprint": result["artifact_fingerprint"],
+              "policy_fingerprint": result["policy"]["policy_fingerprint"],
+              "note": "The scientific payload self-declares its source SHA; the GitHub workflow independently checked out that exact SHA before recomposition. Environment fields are execution provenance, not part of the qualified v1 scientific fingerprint.",
+          }
+          (out / "execution-provenance.json").write_text(
+              json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+
+          report = f'''# BMRB study development evidence v1
+
+This capsule preserves the complete **648-cell development-only** study operating surface recomposed from the 24 successful shards of GitHub Actions run `33467852855`.
+
+## Authority
+
+- science source: `{analysis["science_source_sha"]}`
+- policy fingerprint: `{analysis["policy_fingerprint"]}`
+- artifact fingerprint: `{analysis["artifact_fingerprint"]}`
+- outer replicates per cell: **8**
+- participant bootstrap resamples: **100**
+- final evaluation executed: **false**
+- qualification defined: **false**
+- physical-quantum promotion eligible: **false**
+
+## Applicability-aware descriptive estimands
+
+- pure-null broad promotion: **{analysis["estimand_classes"]["pure_null_broad_promotion_rate"]:.6f}**
+- homogeneous-positive broad recovery: **{analysis["estimand_classes"]["homogeneous_positive_broad_recovery_rate"]:.6f}**
+- contextual/failed-primary broad promotion: **{analysis["estimand_classes"]["contextual_or_failed_primary_broad_promotion_rate"]:.6f}**
+- conflicted-positive broad recovery: **{analysis["estimand_classes"]["conflicted_positive_broad_recovery_rate"]:.6f}**
+- failed-primary role protection: **{analysis["estimand_classes"]["failed_primary_role_protection_rate"]:.6f}**
+- fragile-conflict detection: **{analysis["estimand_classes"]["fragile_conflict_detection_rate"]:.6f}**
+
+These are coarse development summaries, not registered acceptance criteria. With 8 replicates, cell-level rates move in increments of 0.125. A 0/8 observed event rate still has a wide two-sided Wilson interval.
+
+## Critical interpretation
+
+The v1 aggregate `mean_false_promotion_rate` and `mean_known_positive_recovery_rate` are preserved inside the source artifact for schema fidelity, but they mix scientifically distinct scenario classes and should not be presented as classical Type-I error and power.
+
+`primary_role_protection_rate` and `fragile_claim_detection_rate` are not averaged globally here because v1 encodes many non-applicable cases as 1.0. Likewise, no global marginal is reported for `cross_study_effect_scale`, because that axis is inert for all-null scenarios and only perturbs positive-labelled candidate effects.
+
+The direction-agreement sensitivity diagnostic is especially problematic near a true null: it is referenced to the observed primary-study sign, which is itself noise around zero. The resulting warning rate should be treated as a v1 diagnostic semantics problem to fix in a new method rather than threshold-tuned after observing this surface.
+
+## Claim boundary
+
+This capsule is development-only deterministic software evidence. It does not define final acceptance thresholds, execute the evaluation partition, establish biological truth, prove population/task universality, or authorize a physical-quantum mechanism claim.
+'''
+          (out / "README.md").write_text(report, encoding="utf-8")
+
+          manifest = {}
+          for path in sorted(out.iterdir()):
+              if path.name == "sha256-manifest.json" or not path.is_file():
+                  continue
+              manifest[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+          (out / "sha256-manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write(report)
+          PY
+
+      - name: Reverify source artifact after analysis generation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from quantumbci.bmrb_study_operating_artifacts import verify_bmrb_study_operating_mapping
+
+          payload = json.loads(Path("evidence/bmrb-study-development-v1/development-result.json").read_text(encoding="utf-8"))
+          verify_bmrb_study_operating_mapping(payload)
+          PY
+
+      - name: Upload durable evidence capsule artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bmrb-study-development-evidence-capsule
+          path: evidence/bmrb-study-development-v1/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Commit verified evidence capsule to branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add evidence/bmrb-study-development-v1
+          if git diff --cached --quiet; then
+            echo "Evidence capsule already committed."
+          else
+            git commit -m "Preserve verified BMRB study development evidence"
+            git push origin HEAD:research/bmrb-study-development-evidence-v0.20
+          fi
