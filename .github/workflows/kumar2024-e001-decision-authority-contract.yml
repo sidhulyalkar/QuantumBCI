@@ -1,0 +1,140 @@
+name: Kumar2024 E001 decision authority contract
+
+on:
+  push:
+    branches:
+      - research/kumar2024-e001-decision-authority-v0.20
+    paths:
+      - .github/workflows/kumar2024-e001-decision-authority-contract.yml
+      - quantumbci/kumar2024_e001_decision_authority.py
+      - tests/test_kumar2024_e001_decision_authority.py
+      - docs/KUMAR2024_E001_DECISION_AUTHORITY.md
+      - evidence/kumar2024-authority-freeze-v1/**
+  pull_request:
+    paths:
+      - .github/workflows/kumar2024-e001-decision-authority-contract.yml
+      - quantumbci/kumar2024_e001_decision_authority.py
+      - tests/test_kumar2024_e001_decision_authority.py
+      - docs/KUMAR2024_E001_DECISION_AUTHORITY.md
+      - evidence/kumar2024-authority-freeze-v1/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantumbci-kumar2024-e001-decision-authority-v1-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  decision-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Qualify exact authority and adversarial read side
+        run: pytest -q tests/test_kumar2024_e001_decision_authority.py
+
+      - name: Static-check decision authority
+        run: |
+          ruff check \
+            quantumbci/kumar2024_e001_decision_authority.py \
+            tests/test_kumar2024_e001_decision_authority.py
+
+      - name: Exercise installed outcome-blind decision factory
+        run: |
+          python - <<'PY'
+          from quantumbci.kumar2024_e001_decision_authority import (
+              Kumar2024E001BootstrapAuthority,
+              Kumar2024E001DecisionPlan,
+              Kumar2024E001PrimaryCriterion,
+          )
+
+          # Software fixture values only. This step must not define production thresholds.
+          plan = Kumar2024E001DecisionPlan.from_verified_authority_capsule(
+              "evidence/kumar2024-authority-freeze-v1/authority-capsule.json",
+              primary_criterion=Kumar2024E001PrimaryCriterion(
+                  calibration_per_class=10,
+                  minimum_effect=0.01,
+                  rationale="CI software fixture only",
+              ),
+              bootstrap=Kumar2024E001BootstrapAuthority(
+                  n_resamples=500,
+                  seed=20260902,
+              ),
+              rationale="CI software fixture only; not a scientific preregistration",
+          )
+          payload = plan.to_mapping()
+          assert len(payload["authority"]["case_authorities"]) == 18
+          assert payload["bootstrap"]["inference_unit"] == "subject"
+          assert payload["control_authority"]["multiplicity_method"] == "one_family_one_primary_v1"
+          assert payload["decision_semantics"]["information_novelty_promotion_eligible"] is False
+          assert payload["decision_semantics"]["qualified_executor_bound"] is False
+          assert payload["decision_semantics"]["execution_authorized"] is False
+          assert payload["decision_semantics"]["confirmatory_outcomes_observed"] is False
+          PY
+
+      - name: Prove authority surface cannot execute or adjudicate E001 outcomes
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          source = Path("quantumbci/kumar2024_e001_decision_authority.py")
+          tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+          forbidden = {
+              "run_kumar2024_study",
+              "run_kumar2024_subject",
+              "run_longitudinal_e001_case",
+              "paired_participant_bootstrap",
+              "evaluate_density_information_gate",
+              "benchmark_e001_embeddings",
+          }
+          observed = set()
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Name):
+                  observed.add(node.id)
+              elif isinstance(node, ast.Attribute):
+                  observed.add(node.attr)
+          assert not forbidden.intersection(observed), sorted(forbidden.intersection(observed))
+          PY
+
+      - name: Guard scientific claim ceiling and threshold boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path("quantumbci/kumar2024_e001_decision_authority.py").read_text(encoding="utf-8")
+          docs = Path("docs/KUMAR2024_E001_DECISION_AUTHORITY.md").read_text(encoding="utf-8")
+          assert 'information_novelty_promotion_eligible": False' in source
+          assert 'physical_quantum_promotion_eligible": False' in source
+          assert 'execution_authorized": False' in source
+          assert "No scientific threshold has a default" in source
+          assert "no production defaults for the scientific minimum effect" in docs
+          assert "does not authorize execution" in docs
+          assert "not scientific registrations" in docs
+          assert "Real confirmatory E001 remains blocked" in docs
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build --wheel
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert "quantumbci/kumar2024_e001_decision_authority.py" in names
+          PY
