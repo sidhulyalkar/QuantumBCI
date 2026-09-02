@@ -1,0 +1,282 @@
+name: Kumar2024 authority-only preflight
+
+on:
+  push:
+    branches:
+      - research/kumar2024-authority-preflight-v0.20
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantumbci-kumar2024-authority-preflight-v1
+  cancel-in-progress: false
+
+env:
+  SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+  NEUROS_SHA: ffa28ed552dc75158b673fdcd70729b1c9c69b47
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact qualified QuantumBCI science source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+      - name: Checkout exact neurOS authority
+        uses: actions/checkout@v7
+        with:
+          repository: sidhulyalkar/neurOS-v1
+          ref: ${{ env.NEUROS_SHA }}
+          path: _deps/neuros-v1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - name: Install exact real-EEG authority stack
+        run: |
+          python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-models
+          python -m pip install -e '_deps/neuros-v1/packages/neuros-foundation[evidence]'
+          python -m pip install -e .
+      - name: Download, fingerprint, and freeze authority without E001 outcomes
+        run: |
+          mkdir -p kumar2024-preflight
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          import numpy as np
+          from neuros.foundation_models.moabb_longitudinal import build_moabb_longitudinal_dataset
+          from neuros.foundation_models.real_world import collect_moabb
+
+          from quantumbci.studies.kumar2024 import (
+              _neuros_authority_api,
+              _stable_seed,
+              fingerprint_raw_dataset,
+          )
+
+          subjects = (1, 10)
+          target = "5"
+          base_seed = 2026
+          evaluation_fraction = 0.5
+
+          dataset_spec, dataset, paradigm = build_moabb_longitudinal_dataset(
+              "kumar2024",
+              fmin=8.0,
+              fmax=30.0,
+              resample=None,
+          )
+          raw = fingerprint_raw_dataset(
+              dataset,
+              subjects,
+              dataset_key=dataset_spec.key,
+              dataset_id=dataset_spec.source_id,
+          )
+          Path("kumar2024-preflight/raw-source-fingerprint.json").write_text(
+              json.dumps(raw, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          api = _neuros_authority_api()
+          cases = []
+          for subject in subjects:
+              data = collect_moabb(
+                  dataset,
+                  paradigm,
+                  subjects=[subject],
+                  dataset_id=dataset_spec.source_id,
+              )
+              x = np.asarray(data.X)
+              if x.ndim != 3:
+                  raise RuntimeError(f"subject {subject}: expected 3-D EEG epochs, got {x.shape}")
+              if not np.isfinite(x).all():
+                  raise RuntimeError(f"subject {subject}: non-finite EEG values detected")
+
+              observed = api.validate_observed_sessions(
+                  dataset_spec,
+                  api.ordered_group_values(data, split_unit="session"),
+              )
+              if target not in observed:
+                  raise RuntimeError(
+                      f"subject {subject}: target session {target!r} absent; observed={observed}"
+                  )
+              partition = api.chronological_partition(
+                  data,
+                  split_unit="session",
+                  held_out_value=target,
+                  order=observed,
+              )
+              split_seed = _stable_seed(
+                  base_seed,
+                  dataset_spec.source_id,
+                  subject,
+                  target,
+              )
+              split = api.make_nested_calibration_split(
+                  partition,
+                  evaluation_fraction=evaluation_fraction,
+                  seed=split_seed,
+              )
+              metadata = dataset_spec.case_metadata(subject)
+              metadata.update(
+                  {
+                      "held_out_session": target,
+                      "split_seed": int(split_seed),
+                      "preflight_only": True,
+                  }
+              )
+              authority = api.LongitudinalCaseAuthority.from_split(
+                  split,
+                  case_id=(
+                      f"{dataset_spec.source_id}/subject-{subject}/session-{target}/"
+                      f"split-{split_seed}"
+                  ),
+                  history_policy="prior",
+                  observed_group_order=observed,
+                  case_metadata=metadata,
+              )
+              restored = authority.restore(data)
+              if restored.fingerprint != split.fingerprint:
+                  raise RuntimeError("restored split fingerprint drifted from frozen split")
+
+              authority_path = Path(
+                  f"kumar2024-preflight/authority-subject-{subject}-session-{target}.json"
+              )
+              authority_path.write_text(
+                  json.dumps(authority.to_dict(), indent=2, sort_keys=True) + "\n",
+                  encoding="utf-8",
+              )
+              cases.append(
+                  {
+                      "subject": subject,
+                      "input_shape": list(x.shape),
+                      "dtype": x.dtype.str,
+                      "observed_sessions": list(observed),
+                      "held_out_session": target,
+                      "source_history_sessions": list(authority.source_group_values),
+                      "source_train_samples": len(authority.source_train_indices),
+                      "evaluation_samples": len(authority.evaluation_indices),
+                      "calibration_pool_samples": sum(
+                          len(values) for values in authority.calibration_order_by_class.values()
+                      ),
+                      "max_budget_per_class": int(split.max_budget_per_class),
+                      "split_seed": int(split_seed),
+                      "authority_fingerprint": authority.authority_fingerprint,
+                      "partition_fingerprint": authority.partition_fingerprint,
+                      "calibration_split_fingerprint": authority.calibration_split_fingerprint,
+                      "processed_data_sha256": authority.processed_data_sha256,
+                      "raw_subject_fingerprint": raw["by_subject"][str(subject)]["fingerprint"],
+                  }
+              )
+
+          payload = {
+              "purpose": "kumar2024_authority_only_preflight_v1",
+              "science_source_sha": os.environ["SCIENCE_SOURCE_SHA"],
+              "neuros_source_sha": os.environ["NEUROS_SHA"],
+              "dataset_id": dataset_spec.source_id,
+              "subjects": list(subjects),
+              "fmin_hz": 8.0,
+              "fmax_hz": 30.0,
+              "native_resampling": True,
+              "evaluation_fraction": evaluation_fraction,
+              "cases": cases,
+              "dataset_structure_inspected": True,
+              "evidence_assignment_frozen": True,
+              "final_evaluation_indices_created": True,
+              "e001_executed": False,
+              "predictions_computed": False,
+              "mechanism_effects_computed": False,
+              "control_comparisons_computed": False,
+              "confirmatory_outcomes_observed": False,
+              "interpretation": (
+                  "Real public EEG structure and exact longitudinal evidence assignments were "
+                  "validated and fingerprinted. No E001, prediction, mechanism-effect, or "
+                  "control-comparison outcome was computed."
+              ),
+          }
+          canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+          payload["preflight_fingerprint"] = hashlib.sha256(canonical.encode()).hexdigest()
+          Path("kumar2024-preflight/preflight.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          # Validate the payload schema rather than grepping substrings. Boundary keys such as
+          # `predictions_computed=false` must not trip their own fail-closed guard.
+          forbidden_keys = {
+              "accuracy",
+              "auc",
+              "candidate_advantage",
+              "ablation_necessity",
+              "effect_delta",
+              "prediction_values",
+              "predictions",
+              "candidate_metric",
+              "control_metric",
+              "ablated_metric",
+          }
+
+          def keys(value):
+              if isinstance(value, dict):
+                  for key, item in value.items():
+                      yield str(key)
+                      yield from keys(item)
+              elif isinstance(value, list):
+                  for item in value:
+                      yield from keys(item)
+
+          leaked = sorted(forbidden_keys.intersection(keys(payload)))
+          if leaked:
+              raise RuntimeError(f"outcome fields leaked into preflight payload: {leaked}")
+
+          print(
+              json.dumps(
+                  {
+                      "preflight_fingerprint": payload["preflight_fingerprint"],
+                      "raw_dataset_fingerprint": raw["fingerprint"],
+                      "case_count": len(cases),
+                      "dataset_structure_inspected": True,
+                      "evidence_assignment_frozen": True,
+                      "mechanism_effects_computed": False,
+                      "confirmatory_outcomes_observed": False,
+                  },
+                  indent=2,
+                  sort_keys=True,
+              )
+          )
+          PY
+      - name: Enforce outcome-blind preflight boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("kumar2024-preflight/preflight.json").read_text())
+          assert payload["dataset_structure_inspected"] is True
+          assert payload["evidence_assignment_frozen"] is True
+          assert payload["final_evaluation_indices_created"] is True
+          assert payload["e001_executed"] is False
+          assert payload["predictions_computed"] is False
+          assert payload["mechanism_effects_computed"] is False
+          assert payload["control_comparisons_computed"] is False
+          assert payload["confirmatory_outcomes_observed"] is False
+          assert len(payload["cases"]) == 2
+          for case in payload["cases"]:
+              assert case["held_out_session"] == "5"
+              assert case["source_train_samples"] > 0
+              assert case["evaluation_samples"] > 0
+              assert case["calibration_pool_samples"] > 0
+          PY
+      - name: Upload authority-only preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kumar2024-authority-only-preflight-${{ env.SCIENCE_SOURCE_SHA }}
+          path: kumar2024-preflight/
+          if-no-files-found: error
+          retention-days: 90

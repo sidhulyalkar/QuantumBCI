@@ -1,0 +1,188 @@
+name: Kumar2024 cohort authority artifact contract
+
+on:
+  push:
+    branches:
+      - research/kumar2024-full-authority-freeze-v0.20
+    paths:
+      - .github/workflows/kumar2024-authority-artifact-contract.yml
+      - quantumbci/kumar2024_authority_artifacts.py
+      - scripts/package_kumar2024_authority_capsule.py
+      - tests/test_kumar2024_authority_artifacts.py
+      - docs/KUMAR2024_COHORT_AUTHORITY_FREEZE.md
+      - evidence/kumar2024-authority-freeze-v1/**
+  pull_request:
+    paths:
+      - .github/workflows/kumar2024-authority-artifact-contract.yml
+      - quantumbci/kumar2024_authority_artifacts.py
+      - scripts/package_kumar2024_authority_capsule.py
+      - tests/test_kumar2024_authority_artifacts.py
+      - docs/KUMAR2024_COHORT_AUTHORITY_FREEZE.md
+      - evidence/kumar2024-authority-freeze-v1/**
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: quantumbci-kumar2024-authority-artifact-v1-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  EVIDENCE_BRANCH: research/kumar2024-full-authority-freeze-v0.20
+  SOURCE_RUN_ID: "33596812399"
+  SOURCE_WORKFLOW_HEAD: 232b0105b02bb21dee7a22c902fcc6805ef714a5
+  SOURCE_ARTIFACT_ID: "9835103441"
+  SOURCE_ARTIFACT_NAME: Kumar2024-full-authority-freeze-681ea12c436fce121ba74de6f877a8267e94dd3f
+  SOURCE_ARTIFACT_ZIP_DIGEST: sha256:2a5c014ee4f7fcfe2b05d8d208717a597185652a870bff2fef740e7196e828d5
+  EXPECTED_CAPSULE_FINGERPRINT: 1013358b419436a3a9592c8a48eec2372701b1977e7ced06f4c25cfd4ebae29d
+
+jobs:
+  authority-artifact:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout authority artifact branch or PR merge ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'push' && env.EVIDENCE_BRANCH || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Download successful full-cohort freeze without rereading EEG
+        if: github.event_name == 'push'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: sidhulyalkar/QuantumBCI
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: ${{ env.SOURCE_ARTIFACT_NAME }}
+          path: _source-kumar-authority
+
+      - name: Repackage exact successful artifact into canonical repository capsule
+        if: github.event_name == 'push'
+        run: |
+          python scripts/package_kumar2024_authority_capsule.py \
+            --input _source-kumar-authority \
+            --output evidence/kumar2024-authority-freeze-v1 \
+            --workflow-run-id "$SOURCE_RUN_ID" \
+            --workflow-head-sha "$SOURCE_WORKFLOW_HEAD" \
+            --artifact-id "$SOURCE_ARTIFACT_ID" \
+            --artifact-name "$SOURCE_ARTIFACT_NAME" \
+            --artifact-zip-digest "$SOURCE_ARTIFACT_ZIP_DIGEST"
+
+      - name: Qualify persisted cohort authority semantics
+        run: pytest -q tests/test_kumar2024_authority_artifacts.py
+
+      - name: Static-check authority persistence surface
+        run: |
+          ruff check \
+            quantumbci/kumar2024_authority_artifacts.py \
+            scripts/package_kumar2024_authority_capsule.py \
+            tests/test_kumar2024_authority_artifacts.py
+
+      - name: Independent installed verifier smoke
+        run: |
+          python - <<'PY'
+          from quantumbci.kumar2024_authority_artifacts import load_kumar2024_authority_capsule
+          payload = load_kumar2024_authority_capsule(
+              "evidence/kumar2024-authority-freeze-v1/authority-capsule.json"
+          )
+          assert payload["capsule_fingerprint"] == "1013358b419436a3a9592c8a48eec2372701b1977e7ced06f4c25cfd4ebae29d"
+          assert payload["authority_freeze"]["subject_count"] == 18
+          assert len(payload["raw_source_fingerprint"]["files"]) == 360
+          assert payload["claim_boundary"]["e001_executed"] is False
+          assert payload["claim_boundary"]["confirmatory_outcomes_observed"] is False
+          assert payload["claim_boundary"]["physical_quantum_promotion_eligible"] is False
+          PY
+
+      - name: Verify repository byte manifest and claim guards
+        run: |
+          python - <<'PY'
+          from hashlib import sha256
+          import json
+          from pathlib import Path
+
+          root = Path("evidence/kumar2024-authority-freeze-v1")
+          manifest = json.loads((root / "sha256-manifest.json").read_text(encoding="utf-8"))
+          capsule = root / "authority-capsule.json"
+          assert manifest == {"authority-capsule.json": sha256(capsule.read_bytes()).hexdigest()}
+
+          docs = Path("docs/KUMAR2024_COHORT_AUTHORITY_FREEZE.md").read_text(encoding="utf-8")
+          readme = (root / "README.md").read_text(encoding="utf-8")
+          assert "no mechanism outcome was computed or inspected" in docs
+          assert "decision authority is not yet fully preregistered" in docs
+          assert "does **not** make the evaluation samples secret" in docs
+          assert "does not authorize running or interpreting confirmatory E001 outcomes" in readme
+          assert "physical-quantum" in docs
+          PY
+
+      - name: Prove persistence tooling cannot execute E001
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          forbidden = {
+              "run_kumar2024_study",
+              "run_kumar2024_subject",
+              "run_longitudinal_e001_case",
+              "evaluate_density_information_gate",
+              "paired_participant_bootstrap",
+          }
+          observed = set()
+          for name in (
+              "quantumbci/kumar2024_authority_artifacts.py",
+              "scripts/package_kumar2024_authority_capsule.py",
+          ):
+              tree = ast.parse(Path(name).read_text(encoding="utf-8"), filename=name)
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Name):
+                      observed.add(node.id)
+                  elif isinstance(node, ast.Attribute):
+                      observed.add(node.attr)
+          assert not forbidden.intersection(observed), sorted(forbidden.intersection(observed))
+          PY
+
+      - name: Qualify wheel contents
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build --wheel
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          wheel = next(Path("dist").glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert "quantumbci/kumar2024_authority_artifacts.py" in names
+          PY
+
+      - name: Upload canonical authority capsule
+        uses: actions/upload-artifact@v4
+        with:
+          name: kumar2024-canonical-authority-capsule
+          path: evidence/kumar2024-authority-freeze-v1/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Commit exact verified capsule bytes
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add evidence/kumar2024-authority-freeze-v1
+          if git diff --cached --quiet; then
+            echo "Verified Kumar2024 authority capsule already matches the branch."
+          else
+            git commit -m "Preserve verified Kumar2024 cohort authority"
+            git fetch origin "$EVIDENCE_BRANCH"
+            git rebase "origin/$EVIDENCE_BRANCH"
+            git push origin "HEAD:$EVIDENCE_BRANCH"
+          fi

@@ -1,0 +1,129 @@
+name: Kumar2024 full cohort authority freeze
+
+on:
+  push:
+    branches:
+      - research/kumar2024-full-authority-freeze-v0.20
+    paths:
+      - .github/workflows/kumar2024-full-authority-freeze.yml
+      - scripts/kumar2024_full_authority_freeze.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantumbci-kumar2024-full-authority-freeze-v1
+  cancel-in-progress: false
+
+env:
+  SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+  NEUROS_SHA: ffa28ed552dc75158b673fdcd70729b1c9c69b47
+  KUMAR_AUTHORITY_OUTPUT: kumar2024-full-authority-freeze
+
+jobs:
+  authority-freeze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout authority-freeze tooling branch
+        uses: actions/checkout@v7
+        with:
+          ref: research/kumar2024-full-authority-freeze-v0.20
+
+      - name: Checkout exact qualified QuantumBCI science source
+        uses: actions/checkout@v7
+        with:
+          repository: sidhulyalkar/QuantumBCI
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+          path: _science/QuantumBCI
+          persist-credentials: false
+
+      - name: Checkout exact neurOS authority
+        uses: actions/checkout@v7
+        with:
+          repository: sidhulyalkar/neurOS-v1
+          ref: ${{ env.NEUROS_SHA }}
+          path: _deps/neuros-v1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            _science/QuantumBCI/pyproject.toml
+            _deps/neuros-v1/packages/neuros-foundation/pyproject.toml
+
+      - run: python -m pip install --upgrade pip
+
+      - name: Install exact authority stack
+        run: |
+          python -m pip install -e _deps/neuros-v1/packages/neuros-core
+          python -m pip install -e _deps/neuros-v1/packages/neuros-models
+          python -m pip install -e '_deps/neuros-v1/packages/neuros-foundation[evidence]'
+          python -m pip install -e _science/QuantumBCI
+
+      - name: Prove freeze tooling has no mechanism executor
+        run: |
+          ! grep -Eq 'run_kumar2024_study|run_longitudinal_e001_case|evaluate_density_information_gate|paired_participant_bootstrap' scripts/kumar2024_full_authority_freeze.py
+
+      - name: Freeze all 18 subject authorities without mechanism outcomes
+        run: python scripts/kumar2024_full_authority_freeze.py
+
+      - name: Enforce complete cohort and outcome-blind boundary
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("kumar2024-full-authority-freeze")
+          payload = json.loads((root / "authority-freeze.json").read_text(encoding="utf-8"))
+          raw = json.loads((root / "raw-source-fingerprint.json").read_text(encoding="utf-8"))
+          manifest = json.loads((root / "sha256-manifest.json").read_text(encoding="utf-8"))
+
+          assert payload["subjects"] == list(range(1, 19))
+          assert payload["subject_count"] == 18
+          assert len(payload["cases"]) == 18
+          assert payload["expected_sessions"] == ["0", "1", "2", "3", "4", "5"]
+          assert payload["held_out_session"] == "5"
+          assert payload["dataset_structure_inspected"] is True
+          assert payload["class_labels_used_for_stratified_split_construction"] is True
+          assert payload["evidence_assignment_frozen"] is True
+          assert payload["final_evaluation_indices_created"] is True
+          assert payload["e001_executed"] is False
+          assert payload["predictions_computed"] is False
+          assert payload["mechanism_effects_computed"] is False
+          assert payload["control_comparisons_computed"] is False
+          assert payload["confirmatory_outcomes_observed"] is False
+          assert raw["subjects"] == list(range(1, 19))
+          assert payload["raw_dataset_fingerprint"] == raw["fingerprint"]
+          assert payload["raw_file_count"] == len(raw["files"])
+          assert payload["raw_total_bytes"] == sum(int(item["bytes"]) for item in raw["files"])
+
+          authority_files = sorted(root.glob("authority-subject-*-session-5.json"))
+          assert len(authority_files) == 18
+          for case in payload["cases"]:
+              assert case["observed_sessions"] == ["0", "1", "2", "3", "4", "5"]
+              assert case["source_history_sessions"] == ["0", "1", "2", "3", "4"]
+              assert case["evaluation_samples"] > 0
+              assert case["calibration_pool_samples"] > 0
+              assert case["source_train_samples"] > 0
+              assert case["input_shape"][1:] == [22, 2561]
+
+          expected_manifest = {
+              path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in sorted(root.glob("*.json"))
+              if path.name != "sha256-manifest.json"
+          }
+          assert manifest == expected_manifest
+          PY
+
+      - name: Upload full authority freeze
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kumar2024-full-authority-freeze-${{ env.SCIENCE_SOURCE_SHA }}
+          path: kumar2024-full-authority-freeze/
+          if-no-files-found: error
+          retention-days: 90
