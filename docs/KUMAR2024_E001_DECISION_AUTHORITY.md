@@ -138,7 +138,7 @@ The external registration must provide its real:
 - registered document SHA-256;
 - exact registered policy fingerprint.
 
-QuantumBCI does not fabricate or contact an external registry. Software-fixture URI/hash values used in unit tests are **not** scientific registrations.
+QuantumBCI does not fabricate or contact an external registry. Software-fixture URI/hash values used in unit tests are not scientific registrations.
 
 The seal still serializes:
 
