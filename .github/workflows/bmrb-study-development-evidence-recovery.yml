@@ -1,0 +1,116 @@
+name: Recover verified BMRB study development evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/bmrb-study-development-evidence-v0.20
+    paths:
+      - .github/workflows/bmrb-study-development-evidence-recovery.yml
+      - scripts/build_bmrb_study_development_capsule.py
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  SOURCE_RUN_ID: "33467852855"
+  SCIENCE_SOURCE_SHA: 681ea12c436fce121ba74de6f877a8267e94dd3f
+  EVIDENCE_BRANCH: research/bmrb-study-development-evidence-v0.20
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout evidence tooling branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EVIDENCE_BRANCH }}
+
+      - name: Checkout exact qualified science source
+        uses: actions/checkout@v7
+        with:
+          repository: sidhulyalkar/QuantumBCI
+          ref: ${{ env.SCIENCE_SOURCE_SHA }}
+          path: science
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: science/pyproject.toml
+
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e './science[dev]'
+
+      - name: Download already-computed 24-shard development family
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: sidhulyalkar/QuantumBCI
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          pattern: bmrb-study-development-shard-*
+          path: development-shards
+          merge-multiple: true
+
+      - name: Recompose, verify, and analyze without evaluation access
+        run: |
+          python scripts/build_bmrb_study_development_capsule.py \
+            --shards development-shards \
+            --output evidence/bmrb-study-development-v1
+
+      - name: Reverify immutable source result
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from quantumbci.bmrb_study_operating_artifacts import verify_bmrb_study_operating_mapping
+          path = Path("evidence/bmrb-study-development-v1/development-result.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          verify_bmrb_study_operating_mapping(payload)
+          assert len(payload["cells"]) == 648
+          assert payload["policy"]["partition"] == "development"
+          assert payload["evaluation_partition_executed"] is False
+          assert payload["qualification_defined"] is False
+          assert payload["physical_quantum_promotion_eligible"] is False
+          PY
+
+      - name: Verify evidence capsule manifest before persistence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          root = Path("evidence/bmrb-study-development-v1")
+          manifest = json.loads((root / "sha256-manifest.json").read_text(encoding="utf-8"))
+          expected = {
+              path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in sorted(root.iterdir())
+              if path.is_file() and path.name != "sha256-manifest.json"
+          }
+          assert manifest == expected
+          PY
+
+      - name: Upload verified development evidence capsule
+        uses: actions/upload-artifact@v4
+        with:
+          name: bmrb-study-development-evidence-capsule
+          path: evidence/bmrb-study-development-v1/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Commit the exact verified evidence bytes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$EVIDENCE_BRANCH"
+          git rebase "origin/$EVIDENCE_BRANCH"
+          git add evidence/bmrb-study-development-v1
+          if git diff --cached --quiet; then
+            echo "Verified evidence capsule already matches the branch."
+          else
+            git commit -m "Preserve verified BMRB study development evidence"
+            git push origin "HEAD:$EVIDENCE_BRANCH"
+          fi
