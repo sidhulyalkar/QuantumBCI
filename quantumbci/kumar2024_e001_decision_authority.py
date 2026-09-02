@@ -6,10 +6,10 @@ does not execute E001, load result bundles, or choose scientific thresholds.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from hashlib import sha256
 import json
 import math
+from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
