@@ -146,6 +146,8 @@ class Kumar2024E001PrimaryCriterion:
         object.__setattr__(
             self, "minimum_effect", _finite("minimum_effect", self.minimum_effect)
         )
+        if self.minimum_effect < 0.0:
+            raise ValueError("minimum_effect must be non-negative")
         object.__setattr__(self, "rationale", _required_text("rationale", self.rationale))
         if self.estimand != E001_PRIMARY_ESTIMAND:
             raise ValueError("v1 primary estimand must be participant-level density minus ablation")
@@ -256,6 +258,9 @@ class Kumar2024E001ControlAuthority:
             "closed_family": list(E001_CLOSED_FAMILY),
             "strongest_classical_control_selection": "maximum_balanced_accuracy_within_closed_family",
             "strongest_classical_control_promotion_authoritative": False,
+            "multiplicity_method": "one_family_one_primary_v1",
+            "confirmatory_primary_hypothesis": "density_vs_offdiagonal_ablation",
+            "additional_controls_promotion_authoritative": False,
         }
 
     @classmethod
@@ -275,6 +280,15 @@ class Kumar2024E001ControlAuthority:
         _required_bool(
             "strongest_classical_control_promotion_authoritative",
             payload.get("strongest_classical_control_promotion_authoritative"),
+            False,
+        )
+        if payload.get("multiplicity_method") != "one_family_one_primary_v1":
+            raise ValueError("Kumar2024 E001 multiplicity authority drifted")
+        if payload.get("confirmatory_primary_hypothesis") != "density_vs_offdiagonal_ablation":
+            raise ValueError("Kumar2024 E001 primary hypothesis drifted")
+        _required_bool(
+            "additional_controls_promotion_authoritative",
+            payload.get("additional_controls_promotion_authoritative"),
             False,
         )
         return cls(
@@ -393,7 +407,6 @@ def _authority_identity(capsule: Mapping[str, Any]) -> dict[str, Any]:
         authorities.append(
             {
                 "subject": expected_subject,
-                "protocol": _required_text("case.original_protocol", mapping.get("original_protocol")),
                 "authority_fingerprint": _required_text(
                     "case.authority_fingerprint", mapping.get("authority_fingerprint")
                 ),
@@ -552,6 +565,8 @@ class Kumar2024E001DecisionPlan:
                 "physical_quantum_promotion_eligible": False,
                 "confirmatory_outcomes_observed": False,
                 "evaluation_executed": False,
+                "qualified_executor_bound": False,
+                "execution_authorized": False,
             },
             "rationale": self.rationale,
         }
@@ -582,6 +597,8 @@ class Kumar2024E001DecisionPlan:
             "physical_quantum_promotion_eligible": False,
             "confirmatory_outcomes_observed": False,
             "evaluation_executed": False,
+            "qualified_executor_bound": False,
+            "execution_authorized": False,
         }
         if dict(semantics) != expected_semantics:
             raise ValueError("Kumar2024 E001 decision semantics drifted")
@@ -632,6 +649,7 @@ class Kumar2024E001PreregistrationSeal:
             "preregistration": self.preregistration.to_mapping(),
             "evaluation_executed": False,
             "confirmatory_outcomes_observed": False,
+            "execution_authorized": False,
             "information_novelty_promotion_eligible": False,
             "biological_mechanism_established": False,
             "physical_quantum_promotion_eligible": False,
@@ -659,6 +677,7 @@ class Kumar2024E001PreregistrationSeal:
         for key in (
             "evaluation_executed",
             "confirmatory_outcomes_observed",
+            "execution_authorized",
             "information_novelty_promotion_eligible",
             "biological_mechanism_established",
             "physical_quantum_promotion_eligible",
