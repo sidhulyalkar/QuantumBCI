@@ -1,0 +1,751 @@
+{
+  "artifact_fingerprint": "53e18166c3bbf071e929d13d79e1eef09d9046d9a99d49536d728a4c0ff36879",
+  "bootstrap_resamples": 100,
+  "by_scenario": {
+    "fragile-one-conflict-4": {
+      "context_specific_match_rate": 0.9938271604938271,
+      "decision_error_rate": 0.006172839506172839,
+      "mean_study_effect_range": 0.2268487176309773,
+      "mean_successful_replication_margin": -0.004629629629629629,
+      "observed_replication_pass_rate": 0.9938271604938271,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "homogeneous-null-3": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.012237796892648346,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.24845679012345678
+    },
+    "homogeneous-null-4": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.01407623315158078,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.5154320987654321
+    },
+    "homogeneous-positive-3": {
+      "context_specific_match_rate": 0.9922839506172839,
+      "decision_error_rate": 0.007716049382716049,
+      "mean_study_effect_range": 0.025060679778200336,
+      "mean_successful_replication_margin": -0.0015432098765432098,
+      "observed_replication_pass_rate": 0.9922839506172839,
+      "sensitivity_warning_match_rate": 0.9938271604938271
+    },
+    "homogeneous-positive-4": {
+      "context_specific_match_rate": 0.9969135802469136,
+      "decision_error_rate": 0.0030864197530864196,
+      "mean_study_effect_range": 0.026420068445926422,
+      "mean_successful_replication_margin": 0.9922839506172839,
+      "observed_replication_pass_rate": 0.9969135802469136,
+      "sensitivity_warning_match_rate": 0.9891975308641975
+    },
+    "primary-fail-replications-positive-4": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.1330938036594313,
+      "mean_successful_replication_margin": 0.9938271604938271,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-only-positive-4": {
+      "context_specific_match_rate": 0.9984567901234568,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.11612437705195738,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.9969135802469136
+    },
+    "redundant-one-conflict-5": {
+      "context_specific_match_rate": 0.9938271604938271,
+      "decision_error_rate": 0.006172839506172839,
+      "mean_study_effect_range": 0.22838658384288982,
+      "mean_successful_replication_margin": 0.9891975308641975,
+      "observed_replication_pass_rate": 0.9938271604938271,
+      "sensitivity_warning_match_rate": 1.0
+    }
+  },
+  "by_scenario_and_cross_study_effect_scale": {
+    "fragile-one-conflict-4|cross=0": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.22650663037002886,
+      "mean_successful_replication_margin": -0.004629629629629629,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "fragile-one-conflict-4|cross=1": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.2247955402987706,
+      "mean_successful_replication_margin": -0.004629629629629629,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "fragile-one-conflict-4|cross=2": {
+      "context_specific_match_rate": 0.9907407407407407,
+      "decision_error_rate": 0.009259259259259259,
+      "mean_study_effect_range": 0.22924398222413248,
+      "mean_successful_replication_margin": -0.004629629629629629,
+      "observed_replication_pass_rate": 0.9907407407407407,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "homogeneous-null-3|cross=0": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.012245216888308066,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.25462962962962965
+    },
+    "homogeneous-null-3|cross=1": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.012199410190978727,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.25
+    },
+    "homogeneous-null-3|cross=2": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.012268763598658245,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.24074074074074073
+    },
+    "homogeneous-null-4|cross=0": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.014547445902148572,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.5046296296296297
+    },
+    "homogeneous-null-4|cross=1": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.013911735717328129,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.5277777777777778
+    },
+    "homogeneous-null-4|cross=2": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.013769517835265635,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.5138888888888888
+    },
+    "homogeneous-positive-3|cross=0": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.011621595042948091,
+      "mean_successful_replication_margin": -0.004629629629629629,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 0.9953703703703703
+    },
+    "homogeneous-positive-3|cross=1": {
+      "context_specific_match_rate": 0.9907407407407407,
+      "decision_error_rate": 0.009259259259259259,
+      "mean_study_effect_range": 0.021938007005039957,
+      "mean_successful_replication_margin": 0.0,
+      "observed_replication_pass_rate": 0.9907407407407407,
+      "sensitivity_warning_match_rate": 0.9907407407407407
+    },
+    "homogeneous-positive-3|cross=2": {
+      "context_specific_match_rate": 0.9907407407407407,
+      "decision_error_rate": 0.009259259259259259,
+      "mean_study_effect_range": 0.04162243728661296,
+      "mean_successful_replication_margin": 0.0,
+      "observed_replication_pass_rate": 0.9907407407407407,
+      "sensitivity_warning_match_rate": 0.9953703703703703
+    },
+    "homogeneous-positive-4|cross=0": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.013764000686476362,
+      "mean_successful_replication_margin": 0.9953703703703703,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 0.9953703703703703
+    },
+    "homogeneous-positive-4|cross=1": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.02485709224200964,
+      "mean_successful_replication_margin": 0.9907407407407407,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 0.9907407407407407
+    },
+    "homogeneous-positive-4|cross=2": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.040639112409293264,
+      "mean_successful_replication_margin": 0.9907407407407407,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 0.9814814814814815
+    },
+    "primary-fail-replications-positive-4|cross=0": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.1257130404588231,
+      "mean_successful_replication_margin": 0.9953703703703703,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-fail-replications-positive-4|cross=1": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.1329775665520197,
+      "mean_successful_replication_margin": 1.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-fail-replications-positive-4|cross=2": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.14059080396745108,
+      "mean_successful_replication_margin": 0.9861111111111112,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-only-positive-4|cross=0": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.1265964576671049,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-only-positive-4|cross=1": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.11638556106578864,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-only-positive-4|cross=2": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.10539111242297863,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.9907407407407407
+    },
+    "redundant-one-conflict-5|cross=0": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.2272728438537811,
+      "mean_successful_replication_margin": 0.9907407407407407,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "redundant-one-conflict-5|cross=1": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.2272393875556459,
+      "mean_successful_replication_margin": 0.9861111111111112,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "redundant-one-conflict-5|cross=2": {
+      "context_specific_match_rate": 0.9814814814814815,
+      "decision_error_rate": 0.018518518518518517,
+      "mean_study_effect_range": 0.23064752011924242,
+      "mean_successful_replication_margin": 0.9907407407407407,
+      "observed_replication_pass_rate": 0.9814814814814815,
+      "sensitivity_warning_match_rate": 1.0
+    }
+  },
+  "by_scenario_and_participant_count": {
+    "fragile-one-conflict-4|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.22504095953440606,
+      "mean_successful_replication_margin": 0.0,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "fragile-one-conflict-4|n=4": {
+      "context_specific_match_rate": 0.9814814814814815,
+      "decision_error_rate": 0.018518518518518517,
+      "mean_study_effect_range": 0.22792976793012162,
+      "mean_successful_replication_margin": -0.013888888888888888,
+      "observed_replication_pass_rate": 0.9814814814814815,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "fragile-one-conflict-4|n=8": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.22757542542840425,
+      "mean_successful_replication_margin": 0.0,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "homogeneous-null-3|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.008366841774390907,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.2361111111111111
+    },
+    "homogeneous-null-3|n=4": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.016190246175438645,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.26851851851851855
+    },
+    "homogeneous-null-3|n=8": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.012156302728115487,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.24074074074074073
+    },
+    "homogeneous-null-4|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.010025628077193718,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.49537037037037035
+    },
+    "homogeneous-null-4|n=4": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.01831037540034146,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.5185185185185185
+    },
+    "homogeneous-null-4|n=8": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.013892695977207156,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.5324074074074074
+    },
+    "homogeneous-positive-3|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.022662474990311193,
+      "mean_successful_replication_margin": 0.0,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "homogeneous-positive-3|n=4": {
+      "context_specific_match_rate": 0.9861111111111112,
+      "decision_error_rate": 0.013888888888888888,
+      "mean_study_effect_range": 0.02735402952351449,
+      "mean_successful_replication_margin": -0.004629629629629629,
+      "observed_replication_pass_rate": 0.9861111111111112,
+      "sensitivity_warning_match_rate": 0.9907407407407407
+    },
+    "homogeneous-positive-3|n=8": {
+      "context_specific_match_rate": 0.9907407407407407,
+      "decision_error_rate": 0.009259259259259259,
+      "mean_study_effect_range": 0.025165534820775326,
+      "mean_successful_replication_margin": 0.0,
+      "observed_replication_pass_rate": 0.9907407407407407,
+      "sensitivity_warning_match_rate": 0.9907407407407407
+    },
+    "homogeneous-positive-4|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.024073633496083748,
+      "mean_successful_replication_margin": 1.0,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "homogeneous-positive-4|n=4": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.029154311324511913,
+      "mean_successful_replication_margin": 0.9814814814814815,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 0.9768518518518519
+    },
+    "homogeneous-positive-4|n=8": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.026032260517183603,
+      "mean_successful_replication_margin": 0.9953703703703703,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 0.9907407407407407
+    },
+    "primary-fail-replications-positive-4|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.13208586025193922,
+      "mean_successful_replication_margin": 1.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-fail-replications-positive-4|n=4": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.13419356952712053,
+      "mean_successful_replication_margin": 0.9814814814814815,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-fail-replications-positive-4|n=8": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.13300198119923415,
+      "mean_successful_replication_margin": 1.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-only-positive-4|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.11422130205454976,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "primary-only-positive-4|n=4": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.1177096155205202,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.9953703703703703
+    },
+    "primary-only-positive-4|n=8": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.1164422135808022,
+      "mean_successful_replication_margin": -2.0,
+      "observed_replication_pass_rate": 0.0,
+      "sensitivity_warning_match_rate": 0.9953703703703703
+    },
+    "redundant-one-conflict-5|n=16": {
+      "context_specific_match_rate": 1.0,
+      "decision_error_rate": 0.0,
+      "mean_study_effect_range": 0.22700024323974707,
+      "mean_successful_replication_margin": 0.9953703703703703,
+      "observed_replication_pass_rate": 1.0,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "redundant-one-conflict-5|n=4": {
+      "context_specific_match_rate": 0.9953703703703703,
+      "decision_error_rate": 0.004629629629629629,
+      "mean_study_effect_range": 0.23068191645635566,
+      "mean_successful_replication_margin": 0.9814814814814815,
+      "observed_replication_pass_rate": 0.9953703703703703,
+      "sensitivity_warning_match_rate": 1.0
+    },
+    "redundant-one-conflict-5|n=8": {
+      "context_specific_match_rate": 0.9861111111111112,
+      "decision_error_rate": 0.013888888888888888,
+      "mean_study_effect_range": 0.2274775918325667,
+      "mean_successful_replication_margin": 0.9907407407407407,
+      "observed_replication_pass_rate": 0.9861111111111112,
+      "sensitivity_warning_match_rate": 1.0
+    }
+  },
+  "cell_count": 648,
+  "claim_boundary": "Development-only deterministic software evidence. It does not define acceptance thresholds, execute final evaluation, validate biological truth, establish universal generalization, or authorize physical-quantum promotion.",
+  "coarse_rate_resolution": {
+    "interpretation": "Eight outer replicates per cell map gross regimes; they do not provide precision tail-probability calibration.",
+    "step": 0.125,
+    "wilson_95_for_0_of_8": [
+      0.0,
+      0.32440756488388023
+    ],
+    "wilson_95_for_1_of_8": [
+      0.02241749145005667,
+      0.4708881822128535
+    ],
+    "wilson_95_for_8_of_8": [
+      0.6755924351161198,
+      1.0
+    ]
+  },
+  "estimand_classes": {
+    "conflicted_positive_broad_recovery_rate": 0.9938271604938271,
+    "contextual_or_failed_primary_broad_promotion_rate": 0.0,
+    "failed_primary_role_protection_rate": 1.0,
+    "fragile_conflict_detection_rate": 1.0,
+    "homogeneous_positive_broad_recovery_rate": 0.9945987654320988,
+    "pure_null_broad_promotion_rate": 0.0
+  },
+  "evaluation_partition_executed": false,
+  "legacy_aggregate_mapping": {
+    "interpretation": "Retained for v1 fidelity only. False-promotion and recovery aggregates mix scientifically distinct scenario classes and are not classical Type-I error or power estimands.",
+    "values": {
+      "mean_context_semantics_match_rate": 0.9969135802469136,
+      "mean_expected_no_warning_match_rate": 0.5843621399176955,
+      "mean_expected_warning_match_rate": 0.9981481481481481,
+      "mean_false_promotion_rate": 0.0,
+      "mean_known_positive_recovery_rate": 0.9942129629629629,
+      "qualification_defined": false
+    }
+  },
+  "metric_applicability": {
+    "cross_study_effect_scale": "No global marginal is reported because the v1 axis is inert for all-null scenarios and only perturbs positive-labelled candidate effects.",
+    "fragile_claim_detection_rate": "Interpreted only for fragile-one-conflict-4 here; v1 stores 1.0 in many non-applicable scenarios.",
+    "primary_role_protection_rate": "Interpreted only for primary-fail-replications-positive-4; v1 stores 1.0 in non-applicable scenarios.",
+    "sensitivity_warning_under_null": "Direction agreement references the observed primary sign; near a true zero effect that sign is noise, so no-warning match is not well posed without magnitude gating."
+  },
+  "physical_quantum_promotion_eligible": false,
+  "policy_fingerprint": "2fcc59d80a25081359ba711c5599fd8e36cda1db30abaa4e514f1088bbc65fb2",
+  "purpose": "applicability_aware_development_analysis_v1",
+  "qualification_defined": false,
+  "replicates_per_cell": 8,
+  "science_source_sha": "681ea12c436fce121ba74de6f877a8267e94dd3f",
+  "scientific_partition": "development",
+  "worst_20_cells_by_decision_error_then_warning_mismatch": [
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.25,
+      "measurement_noise_scale": 1.0,
+      "observed_replication_pass_rate": 0.75,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.40927543031016883,
+      "pass_rate_ci_upper": 0.9285207872478909,
+      "scenario_id": "fragile-one-conflict-4",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.25,
+      "measurement_noise_scale": 0.5,
+      "observed_replication_pass_rate": 0.75,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.40927543031016883,
+      "pass_rate_ci_upper": 0.9285207872478909,
+      "scenario_id": "redundant-one-conflict-5",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 0.5,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-3",
+      "sensitivity_warning_match_rate": 0.875,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 0.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-3",
+      "sensitivity_warning_match_rate": 0.875,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 0.5,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-3",
+      "sensitivity_warning_match_rate": 0.875,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 0.5,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-3",
+      "sensitivity_warning_match_rate": 0.875,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 1.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-4",
+      "sensitivity_warning_match_rate": 0.875,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-3",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 1.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "homogeneous-positive-4",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 0.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "fragile-one-conflict-4",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "fragile-one-conflict-4",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "redundant-one-conflict-5",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.125,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.875,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.5291118177871464,
+      "pass_rate_ci_upper": 0.9775825085499433,
+      "scenario_id": "redundant-one-conflict-5",
+      "sensitivity_warning_match_rate": 1.0,
+      "within_study_heterogeneity_scale": 1.0
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 0.5
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 0.5
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 1.0,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 4,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 1.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 1.0,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 0.5
+    },
+    {
+      "cross_study_effect_scale": 1.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 2.0,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 0.5
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 0.5,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 2.0
+    },
+    {
+      "cross_study_effect_scale": 2.0,
+      "decision_error_rate": 0.0,
+      "measurement_noise_scale": 1.0,
+      "observed_replication_pass_rate": 0.0,
+      "participant_count": 8,
+      "pass_rate_ci_lower": 0.0,
+      "pass_rate_ci_upper": 0.32440756488388023,
+      "scenario_id": "homogeneous-null-3",
+      "sensitivity_warning_match_rate": 0.0,
+      "within_study_heterogeneity_scale": 2.0
+    }
+  ]
+}
