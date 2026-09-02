@@ -1,0 +1,138 @@
+name: BMRB study development evidence contract
+
+on:
+  push:
+    branches:
+      - research/bmrb-study-development-evidence-v0.20
+    paths:
+      - .github/workflows/bmrb-study-development-evidence-contract.yml
+      - tests/test_bmrb_study_development_evidence.py
+      - evidence/bmrb-study-development-v1/**
+      - scripts/build_bmrb_study_development_capsule.py
+      - docs/BMRB_STUDY_DEVELOPMENT_EXECUTION.md
+      - docs/BMRB_STUDY_EVALUATION_SEAL.md
+  pull_request:
+    paths:
+      - .github/workflows/bmrb-study-development-evidence-contract.yml
+      - tests/test_bmrb_study_development_evidence.py
+      - evidence/bmrb-study-development-v1/**
+      - scripts/build_bmrb_study_development_capsule.py
+      - docs/BMRB_STUDY_DEVELOPMENT_EXECUTION.md
+      - docs/BMRB_STUDY_EVALUATION_SEAL.md
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+
+      - name: Targeted persisted-evidence tests
+        run: pytest -q tests/test_bmrb_study_development_evidence.py
+
+      - name: Ruff evidence tooling and tests
+        run: ruff check scripts/build_bmrb_study_development_capsule.py tests/test_bmrb_study_development_evidence.py
+
+      - name: Independent production verifier smoke
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from quantumbci.bmrb_study_operating_artifacts import verify_bmrb_study_operating_mapping
+
+          root = Path("evidence/bmrb-study-development-v1")
+          payload = json.loads((root / "development-result.json").read_text(encoding="utf-8"))
+          verify_bmrb_study_operating_mapping(payload)
+          assert payload["artifact_fingerprint"] == "53e18166c3bbf071e929d13d79e1eef09d9046d9a99d49536d728a4c0ff36879"
+          assert len(payload["cells"]) == 648
+          assert payload["policy"]["partition"] == "development"
+          assert payload["evaluation_partition_executed"] is False
+          assert payload["qualification_defined"] is False
+          assert payload["physical_quantum_promotion_eligible"] is False
+          PY
+
+      - name: Manifest and claim guards
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("evidence/bmrb-study-development-v1")
+          manifest = json.loads((root / "sha256-manifest.json").read_text(encoding="utf-8"))
+          expected = {
+              path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in sorted(root.iterdir())
+              if path.is_file() and path.name != "sha256-manifest.json"
+          }
+          assert manifest == expected
+
+          analysis = json.loads((root / "development-analysis.json").read_text(encoding="utf-8"))
+          assert "by_cross_study_effect_scale" not in analysis
+          assert "by_scenario_and_cross_study_effect_scale" in analysis
+          for summary in analysis["by_scenario"].values():
+              assert "primary_role_protection_rate" not in summary
+              assert "fragile_claim_detection_rate" not in summary
+          assert "not classical Type-I error" in analysis["legacy_aggregate_mapping"]["interpretation"]
+          assert "not well posed" in analysis["metric_applicability"]["sensitivity_warning_under_null"]
+
+          development_doc = Path("docs/BMRB_STUDY_DEVELOPMENT_EXECUTION.md").read_text(encoding="utf-8")
+          seal_doc = Path("docs/BMRB_STUDY_EVALUATION_SEAL.md").read_text(encoding="utf-8")
+          assert "procedurally held out and unexecuted" in development_doc
+          assert "policy-enforced holdout" in seal_doc
+          assert "not cryptographic" in seal_doc
+          assert "No study-level evaluation cell has been executed" in seal_doc
+          assert "physical-quantum" in development_doc
+          PY
+
+      - name: Prove evidence tooling contains no evaluation execution path
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          path = Path("scripts/build_bmrb_study_development_capsule.py")
+          tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+          violations = []
+
+          def literal_text(node):
+              if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                  return node.value
+              return None
+
+          for node in ast.walk(tree):
+              if not isinstance(node, ast.Call):
+                  continue
+
+              function_name = None
+              if isinstance(node.func, ast.Name):
+                  function_name = node.func.id
+              elif isinstance(node.func, ast.Attribute):
+                  function_name = node.func.attr
+
+              if function_name == "BMRBStudyOperatingPolicy":
+                  for keyword in node.keywords:
+                      if keyword.arg == "partition" and literal_text(keyword.value) == "evaluation":
+                          violations.append("constructs an evaluation BMRBStudyOperatingPolicy")
+
+              if function_name == "effective_seed":
+                  values = list(node.args) + [
+                      keyword.value
+                      for keyword in node.keywords
+                      if keyword.arg == "partition"
+                  ]
+                  if any(literal_text(value) == "evaluation" for value in values):
+                      violations.append("derives an evaluation effective_seed")
+
+          if violations:
+              raise RuntimeError(f"development evidence tooling crossed evaluation boundary: {violations}")
+          PY

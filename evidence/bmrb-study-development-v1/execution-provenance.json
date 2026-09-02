@@ -1,0 +1,15 @@
+{
+  "artifact_fingerprint": "53e18166c3bbf071e929d13d79e1eef09d9046d9a99d49536d728a4c0ff36879",
+  "note": "Execution provenance supplements, but does not alter, the qualified v1 scientific fingerprint.",
+  "numpy": "2.4.6",
+  "pip": "pip 26.2.1 from /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/pip (python 3.11)",
+  "policy_fingerprint": "2fcc59d80a25081359ba711c5599fd8e36cda1db30abaa4e514f1088bbc65fb2",
+  "python": "3.11.16",
+  "recovery_workflow_commit_sha": "f0cf2e182d4229ca2720afff88aad2c165d7ac64",
+  "recovery_workflow_run_id": 33596653260,
+  "runner_arch": "X64",
+  "runner_os": "Linux",
+  "science_source_sha": "681ea12c436fce121ba74de6f877a8267e94dd3f",
+  "source_workflow_head_sha": "4838be9857a42b0633dfd53c78cdc62f1a45df5d",
+  "source_workflow_run_id": 33467852855
+}
