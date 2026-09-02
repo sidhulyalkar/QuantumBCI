@@ -19,4 +19,10 @@ Key frozen identities:
 
 The source corpus contains 360 selected GDF files totaling 4,193,818,400 bytes. MOABB subjects 10–18 map to raw subject folders 11–19, so raw folder identity must not be inferred directly from MOABB participant number.
 
+## Persistence qualification
+
+The canonical capsule was regenerated from the successful source artifact, fully qualified, and written to this branch by persistence run `33602971854`. That run passed the eight semantic/adversarial artifact tests, Ruff, an independent installed read-side verifier, the repository byte-manifest and claim guards, the AST no-E001-executor guard, wheel-content qualification, canonical capsule upload, and the final verified-byte commit step. The exact persisted evidence commit produced by that run is `97480d50dd0cc640ea1e8bdf53fcd6e81434dca3`.
+
+This README update intentionally changes no authority data or scientific fingerprint. Its purpose is to trigger an additional read-side qualification on a branch that already contains the workflow-persisted `authority-capsule.json`. That qualification must regenerate the same capsule fingerprint `1013358b419436a3a9592c8a48eec2372701b1977e7ced06f4c25cfd4ebae29d` and leave the persisted evidence bytes unchanged.
+
 This artifact is an input to future preregistration. It is **not** the final decision-rule preregistration and does not authorize running or interpreting confirmatory E001 outcomes by itself.
