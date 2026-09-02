@@ -64,8 +64,36 @@ That freezes, among other things:
 - seed-partition fingerprint.
 
 The evaluation policy must use `partition="evaluation"`, while the public study operating
-runner continues to reject that partition. Creating a seal therefore does not reveal or
-consume final evaluation evidence.
+runner continues to reject that partition. Creating a seal therefore does not execute or
+consume final evaluation evidence through the qualified runner.
+
+## The v1 holdout is procedural, not cryptographic
+
+The word "seal" describes a scientific-policy boundary in v1, not secret test-set entropy.
+The deterministic `StudySimulationSeedPartition` parameters, including the evaluation
+offset, are part of the public source and serialized authority. A researcher who deliberately
+bypasses the qualified evaluation runner can therefore derive the deterministic evaluation
+seed space from lower-level public components.
+
+The v1 safeguards are still meaningful:
+
+- the qualified runner refuses evaluation execution;
+- development and evaluation seed spaces are disjoint;
+- the exact future policy is fingerprinted before evaluation;
+- external preregistration can bind the complete acceptance authority;
+- any actual evaluation execution remains auditable as a procedural violation if it occurs
+  before registration.
+
+However, this must not be described as cryptographic blinding or as making synthetic final
+outcomes technically inaccessible. The more precise language is **procedurally held out** or
+**policy-enforced holdout**.
+
+If a future benchmark requires cryptographic blinding, it should use a new method with
+high-entropy evaluation seed material held outside the repository, a public hash commitment
+made before development decisions are finalized, and a one-time reveal only after the exact
+analysis/acceptance authority has been externally registered.
+
+No study-level evaluation cell has been executed in the completed v1 development program.
 
 ## Full RNG authority is serialized by the seal
 
@@ -78,13 +106,23 @@ The authority binds development/evaluation offsets, cell/replicate/study strides
 maximum cell/replicate/study capacities. The underlying constructor proves the complete
 capacity-bounded development and evaluation seed spaces are disjoint.
 
+Disjoint deterministic seed spaces prevent accidental development/evaluation overlap. They
+do not by themselves create secret evaluation entropy.
+
 ## Explicit acceptance criteria, no default thresholds
 
 `StudyOperatingAcceptanceCriterion` supports bounded aggregate and scenario-level metrics.
 QuantumBCI supplies **no scientific numeric defaults**. Threshold values must be justified
 and frozen before final evaluation.
 
-At minimum, a final plan must explicitly bound:
+The v1 schema currently requires criteria that include aggregate mean false-promotion and
+aggregate mean known-positive recovery. The completed development surface showed that those
+aggregates combine scientifically distinct scenario classes. They remain part of qualified
+v1 serialization, but they should not be mistaken for classical Type-I error and power, and
+new publication-grade acceptance semantics should receive a new method ID rather than
+silently redefining v1 after observing development results.
+
+At minimum, the qualified v1 plan requires explicit bounds for:
 
 - aggregate mean false-promotion rate, with an upper bound;
 - aggregate mean known-positive recovery, with a lower bound;
@@ -95,8 +133,9 @@ At minimum, a final plan must explicitly bound:
 - sensitivity warning behavior when a five-study family has positive replication margin
   but still contains a directional reversal.
 
-This required set protects distinct failure modes rather than collapsing the hierarchy into
-one headline score.
+A future v2 should separate pure-null broad promotion, contextual leakage, failed-primary
+replacement, homogeneous-positive recovery, conflict-tolerant recovery, and warning
+calibration into explicit estimands rather than relying on mixed headline averages.
 
 ## Machine-readable hierarchy authority
 
@@ -113,6 +152,10 @@ one headline score.
 
 A sensitivity warning can therefore qualify a broad PASS as fragile or context-sensitive,
 but it cannot silently become a new promotion veto inside v1.
+
+The completed development surface reinforces that separation: the broad replication decision
+behaved cleanly in pure-null controls while the direction-agreement warning was poorly
+calibrated near true zero effects. That warning must remain non-authoritative in v1.
 
 ## Machine-readable multiplicity and adaptive-search authority
 
@@ -150,12 +193,18 @@ all nested authorities together:
 
 Changing any nested policy changes the plan fingerprint and invalidates the registration.
 
+External preregistration is particularly important for v1 because the synthetic evaluation
+seed authority is public. The scientific defense against researcher degrees of freedom is
+therefore the timestamped frozen decision policy and transparent execution history, not a
+claim that the deterministic test seeds are unknowable.
+
 ## What this does not authorize
 
 The seal is an authorization object for a future **synthetic software benchmark**. It does
 not:
 
 - execute the final evaluation partition;
+- make the final synthetic outcomes cryptographically inaccessible;
 - validate biological truth;
 - prove a neural mechanism is causal;
 - establish universal replication or heterogeneity thresholds;
@@ -165,4 +214,5 @@ not:
 - authorize a physical-quantum substrate interpretation.
 
 A future evaluation executor/adjudicator must be a separate method and should consume an
-externally registered seal. Until that method exists and is separately qualified, the final study-level evaluation partition remains sealed and unexecuted.
+externally registered seal. Until that method exists and is separately qualified, the final
+study-level evaluation partition remains procedurally held out and unexecuted.
