@@ -58,7 +58,7 @@ jobs:
 
       - name: Download successful full-cohort freeze without rereading EEG
         if: github.event_name == 'push'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: sidhulyalkar/QuantumBCI
@@ -165,7 +165,7 @@ jobs:
           PY
 
       - name: Upload canonical authority capsule
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kumar2024-canonical-authority-capsule
           path: evidence/kumar2024-authority-freeze-v1/

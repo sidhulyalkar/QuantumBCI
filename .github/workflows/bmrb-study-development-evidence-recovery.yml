@@ -46,7 +46,7 @@ jobs:
       - run: python -m pip install -e './science[dev]'
 
       - name: Download already-computed 24-shard development family
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: sidhulyalkar/QuantumBCI
@@ -94,7 +94,7 @@ jobs:
           PY
 
       - name: Upload verified development evidence capsule
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bmrb-study-development-evidence-capsule
           path: evidence/bmrb-study-development-v1/
